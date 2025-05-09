@@ -1,0 +1,57 @@
+# Fichiers binaires et exécutables
+/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Fichiers de dépendances
+vendor/
+
+# Fichiers de cache Go 
+.go/
+
+# Fichiers de build
+build/
+dist/
+
+# Fichiers temporaires
+tmp/
+temp/
+*.tmp
+
+# Fichiers de logs
+logs/
+*.log
+
+# Fichiers de configuration locale qui ne devraient pas être commités
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+config.local.json
+
+# Base de données SQLite
+*.db
+*.sqlite
+*.sqlite3
+
+# Fichiers d'IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# Fichiers de test de couverture
+coverage.txt
+*.cover
+*.coverprofile
