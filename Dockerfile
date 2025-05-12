@@ -1,5 +1,6 @@
 # Étape 1 : builder
-FROM golang:1.21 as builder
+FROM golang:1.24.2 as builder
+
 
 WORKDIR /app
 
