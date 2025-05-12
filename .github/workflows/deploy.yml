@@ -1,4 +1,4 @@
-name: Go CI/CD
+name: CI/CD – Deploy OnlyFlick Go API
 
 on:
   push:
@@ -6,27 +6,25 @@ on:
       - main
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.5.4
         with:
-          go-version: 1.21
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Build
-        run: go build -o onlyflick ./cmd/api
-
-      - name: Run tests
-        run: go test ./...
-
-      - name: Docker Build & Push (optional if Railway auto-builds)
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: false
-          tags: onlyflick:latest
+      - name: Deploy to VPS
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+            cd /opt/onlyflick
+            git pull origin main
+            docker stop onlyflick || true
+            docker rm onlyflick || true
+            docker build -t onlyflick-api .
+            docker run -d --name onlyflick -p 8080:8080 --env-file .env onlyflick-api
+          EOF
