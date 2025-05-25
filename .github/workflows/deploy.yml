@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
   build-and-deploy:
@@ -34,8 +37,19 @@ jobs:
       - name: Deploy on VPS
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+            cd /opt/onlyflick
+
+            echo " Pull de la dernière image Docker..."
             docker pull ${{ secrets.DOCKER_USERNAME }}/onlyflick-api:latest
+
+            echo " Stop + suppression de l'ancien container..."
             docker stop onlyflick || true
             docker rm onlyflick || true
-            docker run -d --name onlyflick -p 8080:8080 --env-file .env ${{ secrets.DOCKER_USERNAME }}/onlyflick-api:latest
+
+            echo " Lancement du nouveau container..."
+            docker run -d \
+              --name onlyflick \
+              -p 8080:8080 \
+              --env-file .env \
+              ${{ secrets.DOCKER_USERNAME }}/onlyflick-api:latest
           EOF
