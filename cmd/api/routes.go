@@ -10,7 +10,7 @@ func registerRoutes(router *mux.Router) {
 	// Route pour la racine "/"
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Bonjour !"))
+		w.Write([]byte("Bonjour ! j'ai changé la ci/cd"))
 	}).Methods("GET")
 
 	// API versioning
