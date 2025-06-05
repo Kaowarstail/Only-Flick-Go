@@ -1,4 +1,3 @@
-// filepath: /home/kaowarstail/Documents/PEC2/project/Only-Flick-Go/cmd/api/routes.go
 package main
 
 import (
