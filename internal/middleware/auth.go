@@ -10,10 +10,13 @@ import (
 	"github.com/Kaowarstail/Only-Flick-Go/config"
 )
 
-// UserIDKey est la clé utilisée pour stocker l'ID utilisateur dans le contexte
+// Clés de contexte pour stocker des informations dans la requête HTTP
 type contextKey string
 
-const UserIDKey contextKey = "userID"
+const (
+	UserIDKey   contextKey = "userID"
+	UserRoleKey contextKey = "userRole"
+)
 
 // JWTAuth authentifie les requêtes à l'aide de JWT
 func JWTAuth(next http.Handler) http.Handler {
@@ -47,9 +50,11 @@ func JWTAuth(next http.Handler) http.Handler {
 
 		// Extraction des informations utilisateur du token
 		userID := uint(claims["user_id"].(float64))
+		userRole, _ := claims["role"].(string)
 
-		// Ajout de l'ID utilisateur au contexte de la requête
+		// Ajout de l'ID utilisateur et du rôle au contexte de la requête
 		ctx := context.WithValue(r.Context(), UserIDKey, userID)
+		ctx = context.WithValue(ctx, UserRoleKey, userRole)
 
 		// Appel du gestionnaire suivant avec le contexte enrichi
 		next.ServeHTTP(w, r.WithContext(ctx))
