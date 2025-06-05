@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 
+	"github.com/Kaowarstail/Only-Flick-Go/internal/handlers"
 	"github.com/gorilla/mux"
 )
 
@@ -31,17 +32,44 @@ func registerRoutes(router *mux.Router) {
 	apiV1.HandleFunc("/users/{id}", handleDeleteUser).Methods("DELETE")
 
 	// Auth routes
+	auth := apiV1.PathPrefix("/auth").Subrouter()
+	auth.HandleFunc("/login", handleLogin).Methods("POST")
+	auth.HandleFunc("/logout", handleLogout).Methods("POST")
+
+	// Garder les anciennes routes pour compatibilité
 	apiV1.HandleFunc("/login", handleLogin).Methods("POST")
 	apiV1.HandleFunc("/logout", handleLogout).Methods("POST")
 
 	// Autres routes...
 }
 
-// Handlers temporaires pour compilation
-func handleGetUsers(w http.ResponseWriter, r *http.Request)   {}
-func handleCreateUser(w http.ResponseWriter, r *http.Request) {}
-func handleGetUser(w http.ResponseWriter, r *http.Request)    {}
-func handleUpdateUser(w http.ResponseWriter, r *http.Request) {}
-func handleDeleteUser(w http.ResponseWriter, r *http.Request) {}
-func handleLogin(w http.ResponseWriter, r *http.Request)      {}
-func handleLogout(w http.ResponseWriter, r *http.Request)     {}
+// Pas besoin d'importation supplémentaire, déjà importé en haut du fichier
+
+// Handlers pour les routes
+func handleGetUsers(w http.ResponseWriter, r *http.Request) {
+	handlers.GetUsers(w, r)
+}
+
+func handleCreateUser(w http.ResponseWriter, r *http.Request) {
+	handlers.CreateUser(w, r)
+}
+
+func handleGetUser(w http.ResponseWriter, r *http.Request) {
+	handlers.GetUser(w, r)
+}
+
+func handleUpdateUser(w http.ResponseWriter, r *http.Request) {
+	handlers.UpdateUser(w, r)
+}
+
+func handleDeleteUser(w http.ResponseWriter, r *http.Request) {
+	handlers.DeleteUser(w, r)
+}
+
+func handleLogin(w http.ResponseWriter, r *http.Request) {
+	handlers.Login(w, r)
+}
+
+func handleLogout(w http.ResponseWriter, r *http.Request) {
+	handlers.Logout(w, r)
+}
