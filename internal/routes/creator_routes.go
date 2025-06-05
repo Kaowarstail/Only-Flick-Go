@@ -3,6 +3,7 @@ package routes
 import (
 	"net/http"
 
+	"github.com/Kaowarstail/Only-Flick-Go/internal/handlers"
 	"github.com/Kaowarstail/Only-Flick-Go/internal/middleware"
 	"github.com/gorilla/mux"
 )
@@ -10,15 +11,15 @@ import (
 // RegisterCreatorRoutes enregistre toutes les routes de gestion des créateurs
 func RegisterCreatorRoutes(router *mux.Router) {
 	// Routes publiques pour les créateurs
-	router.HandleFunc("/creators", handleGetCreators).Methods("GET")
-	router.HandleFunc("/creators/{id}", handleGetCreator).Methods("GET")
-	router.HandleFunc("/creators/featured", handleGetFeaturedCreators).Methods("GET")
-	router.HandleFunc("/creators/search", handleSearchCreators).Methods("GET")
+	router.HandleFunc("/creators", handlers.GetCreators).Methods("GET")
+	router.HandleFunc("/creators/{id}", handlers.GetCreator).Methods("GET")
+	router.HandleFunc("/creators/featured", handlers.GetFeaturedCreators).Methods("GET")
+	router.HandleFunc("/creators/search", handlers.SearchCreators).Methods("GET")
 	router.HandleFunc("/creators/{id}/subscription-plans", handleGetCreatorSubscriptionPlans).Methods("GET")
 
 	// Routes protégées pour les créateurs
-	router.Handle("/creators", middleware.JWTAuth(handleBecomeCreator)).Methods("POST")
-	router.Handle("/creators/{id}", middleware.JWTAuth(handleUpdateCreator)).Methods("PUT")
+	router.Handle("/creators", middleware.JWTAuth(http.HandlerFunc(handlers.BecomeCreator))).Methods("POST")
+	router.Handle("/creators/{id}", middleware.JWTAuth(http.HandlerFunc(handlers.UpdateCreator))).Methods("PUT")
 	router.Handle("/creators/{id}/banner", middleware.JWTAuth(handleUploadCreatorBanner)).Methods("PUT")
 	router.Handle("/creators/{id}/subscribers", middleware.JWTAuth(handleGetCreatorSubscribers)).Methods("GET")
 	router.Handle("/creators/{id}/stats", middleware.JWTAuth(handleGetCreatorStats)).Methods("GET")

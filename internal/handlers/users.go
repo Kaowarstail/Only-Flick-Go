@@ -9,6 +9,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/Kaowarstail/Only-Flick-Go/internal/database"
+	"github.com/Kaowarstail/Only-Flick-Go/internal/middleware"
 	"github.com/Kaowarstail/Only-Flick-Go/models"
 )
 
@@ -93,24 +94,52 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Décode les nouvelles valeurs
-	var updatedUser models.User
+	// Vérifier si l'utilisateur connecté a le droit de modifier cet utilisateur
+	userID, ok := middleware.GetUserIDFromContext(r.Context())
+	if !ok || userID != user.ID {
+		// Vérifier si c'est un admin
+		userRole, _ := r.Context().Value(middleware.UserRoleKey).(string)
+		if userRole != string(models.RoleAdmin) {
+			respondWithError(w, http.StatusForbidden, "Vous n'êtes pas autorisé à modifier cet utilisateur")
+			return
+		}
+	}
+
+	// Structure pour contenir les données à mettre à jour
+	var updateData struct {
+		FirstName      *string `json:"first_name"`
+		LastName       *string `json:"last_name"`
+		Email          *string `json:"email"`
+		Biography      *string `json:"biography"`
+		ProfilePicture *string `json:"profile_picture"`
+		Password       *string `json:"password"`
+	}
+
 	decoder := json.NewDecoder(r.Body)
-	if err := decoder.Decode(&updatedUser); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Données d'utilisateur invalides")
+	if err := decoder.Decode(&updateData); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Données invalides")
 		return
 	}
 	defer r.Body.Close()
 
-	// Mise à jour des champs
-	user.Username = updatedUser.Username
-	user.Email = updatedUser.Email
-	user.FirstName = updatedUser.FirstName
-	user.LastName = updatedUser.LastName
-
-	// Si un nouveau mot de passe est fourni, le hacher
-	if updatedUser.Password != "" {
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(updatedUser.Password), bcrypt.DefaultCost)
+	// Mettre à jour uniquement les champs fournis
+	if updateData.FirstName != nil {
+		user.FirstName = *updateData.FirstName
+	}
+	if updateData.LastName != nil {
+		user.LastName = *updateData.LastName
+	}
+	if updateData.Email != nil {
+		user.Email = *updateData.Email
+	}
+	if updateData.Biography != nil {
+		user.Biography = *updateData.Biography
+	}
+	if updateData.ProfilePicture != nil {
+		user.ProfilePicture = *updateData.ProfilePicture
+	}
+	if updateData.Password != nil {
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(*updateData.Password), bcrypt.DefaultCost)
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, "Erreur lors du hachage du mot de passe")
 			return
@@ -118,8 +147,12 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 		user.Password = string(hashedPassword)
 	}
 
-	// Sauvegarde des modifications
-	database.GetDB().Save(&user)
+	// Enregistrer les modifications
+	result = database.GetDB().Save(&user)
+	if result.Error != nil {
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la mise à jour de l'utilisateur")
+		return
+	}
 
 	respondWithJSON(w, http.StatusOK, user.ToResponse())
 }
@@ -140,7 +173,23 @@ func DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	database.GetDB().Delete(&user)
+	// Vérifier si l'utilisateur connecté a le droit de supprimer cet utilisateur
+	userID, ok := middleware.GetUserIDFromContext(r.Context())
+	if !ok || userID != user.ID {
+		// Vérifier si c'est un admin
+		userRole, _ := r.Context().Value(middleware.UserRoleKey).(string)
+		if userRole != string(models.RoleAdmin) {
+			respondWithError(w, http.StatusForbidden, "Vous n'êtes pas autorisé à supprimer cet utilisateur")
+			return
+		}
+	}
+
+	// Supprimer l'utilisateur (soft delete si GORM est configuré avec DeletedAt)
+	result = database.GetDB().Delete(&user)
+	if result.Error != nil {
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la suppression de l'utilisateur")
+		return
+	}
 
 	respondWithJSON(w, http.StatusOK, map[string]string{"message": "Utilisateur supprimé avec succès"})
 }
