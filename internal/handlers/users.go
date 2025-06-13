@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/gorilla/mux"
 	"golang.org/x/crypto/bcrypt"
@@ -22,7 +21,6 @@ func GetUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convertir les utilisateurs en réponses
 	var responses []models.UserResponse
 	for _, user := range users {
 		responses = append(responses, user.ToResponse())
@@ -34,14 +32,10 @@ func GetUsers(w http.ResponseWriter, r *http.Request) {
 // GetUser récupère un utilisateur par son ID
 func GetUser(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	id, err := strconv.Atoi(vars["id"])
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "ID utilisateur invalide")
-		return
-	}
+	id := vars["id"]
 
 	var user models.User
-	result := database.GetDB().First(&user, id)
+	result := database.GetDB().First(&user, "id = ?", id)
 	if result.Error != nil {
 		respondWithError(w, http.StatusNotFound, "Utilisateur non trouvé")
 		return
@@ -60,7 +54,6 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	// Hachage du mot de passe
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Erreur lors du hachage du mot de passe")
@@ -68,7 +61,6 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	user.Password = string(hashedPassword)
 
-	// Création de l'utilisateur dans la base de données
 	result := database.GetDB().Create(&user)
 	if result.Error != nil {
 		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la création de l'utilisateur")
@@ -81,23 +73,17 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 // UpdateUser met à jour un utilisateur existant
 func UpdateUser(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	id, err := strconv.Atoi(vars["id"])
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "ID utilisateur invalide")
-		return
-	}
+	id := vars["id"]
 
 	var user models.User
-	result := database.GetDB().First(&user, id)
+	result := database.GetDB().First(&user, "id = ?", id)
 	if result.Error != nil {
 		respondWithError(w, http.StatusNotFound, "Utilisateur non trouvé")
 		return
 	}
 
-	// Vérifier si l'utilisateur connecté a le droit de modifier cet utilisateur
-	userID, ok := middleware.GetUserIDFromContext(r.Context())
-	if !ok || userID != user.ID {
-		// Vérifier si c'est un admin
+	userID := r.Context().Value(middleware.UserIDKey).(string)
+	if userID != user.ID {
 		userRole, _ := r.Context().Value(middleware.UserRoleKey).(string)
 		if userRole != string(models.RoleAdmin) {
 			respondWithError(w, http.StatusForbidden, "Vous n'êtes pas autorisé à modifier cet utilisateur")
@@ -105,7 +91,6 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Structure pour contenir les données à mettre à jour
 	var updateData struct {
 		FirstName      *string `json:"first_name"`
 		LastName       *string `json:"last_name"`
@@ -122,7 +107,6 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	// Mettre à jour uniquement les champs fournis
 	if updateData.FirstName != nil {
 		user.FirstName = *updateData.FirstName
 	}
@@ -147,7 +131,6 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 		user.Password = string(hashedPassword)
 	}
 
-	// Enregistrer les modifications
 	result = database.GetDB().Save(&user)
 	if result.Error != nil {
 		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la mise à jour de l'utilisateur")
@@ -160,23 +143,17 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 // DeleteUser supprime un utilisateur
 func DeleteUser(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	id, err := strconv.Atoi(vars["id"])
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "ID utilisateur invalide")
-		return
-	}
+	id := vars["id"]
 
 	var user models.User
-	result := database.GetDB().First(&user, id)
+	result := database.GetDB().First(&user, "id = ?", id)
 	if result.Error != nil {
 		respondWithError(w, http.StatusNotFound, "Utilisateur non trouvé")
 		return
 	}
 
-	// Vérifier si l'utilisateur connecté a le droit de supprimer cet utilisateur
-	userID, ok := middleware.GetUserIDFromContext(r.Context())
-	if !ok || userID != user.ID {
-		// Vérifier si c'est un admin
+	userID := r.Context().Value(middleware.UserIDKey).(string)
+	if userID != user.ID {
 		userRole, _ := r.Context().Value(middleware.UserRoleKey).(string)
 		if userRole != string(models.RoleAdmin) {
 			respondWithError(w, http.StatusForbidden, "Vous n'êtes pas autorisé à supprimer cet utilisateur")
@@ -184,7 +161,6 @@ func DeleteUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Supprimer l'utilisateur (soft delete si GORM est configuré avec DeletedAt)
 	result = database.GetDB().Delete(&user)
 	if result.Error != nil {
 		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la suppression de l'utilisateur")
@@ -194,7 +170,6 @@ func DeleteUser(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, map[string]string{"message": "Utilisateur supprimé avec succès"})
 }
 
-// Fonctions utilitaires pour les réponses HTTP
 func respondWithError(w http.ResponseWriter, code int, message string) {
 	respondWithJSON(w, code, map[string]string{"error": message})
 }

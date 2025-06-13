@@ -17,7 +17,7 @@ const (
 
 // User représente un utilisateur du système
 type User struct {
-	ID             uint       `json:"id" gorm:"primaryKey"`
+	ID             string     `json:"id" gorm:"primaryKey"`
 	Username       string     `json:"username" gorm:"uniqueIndex;not null"`
 	Email          string     `json:"email" gorm:"uniqueIndex;not null"`
 	Password       string     `json:"-" gorm:"not null"` // Le "-" signifie que ce champ ne sera pas inclus dans la sérialisation JSON
@@ -46,7 +46,7 @@ type User struct {
 
 // UserResponse est utilisé pour retourner les données utilisateur sans le mot de passe
 type UserResponse struct {
-	ID             uint      `json:"id"`
+	ID             string    `json:"id"`
 	Username       string    `json:"username"`
 	Email          string    `json:"email"`
 	FirstName      string    `json:"first_name"`
@@ -62,7 +62,7 @@ type UserResponse struct {
 // CreatorProfile contient des informations supplémentaires pour les créateurs
 type CreatorProfile struct {
 	ID               uint      `json:"id" gorm:"primaryKey"`
-	UserID           uint      `json:"user_id" gorm:"uniqueIndex"`
+	UserID           string    `json:"user_id" gorm:"uniqueIndex"`
 	User             User      `json:"-" gorm:"foreignKey:UserID"`
 	BannerImage      string    `json:"banner_image"`
 	WebsiteURL       string    `json:"website_url"`
@@ -76,13 +76,14 @@ type CreatorProfile struct {
 // Content représente un contenu publié par un créateur
 type Content struct {
 	ID           uint           `json:"id" gorm:"primaryKey"`
-	CreatorID    uint           `json:"creator_id"`
+	CreatorID    string         `json:"creator_id"`
 	Creator      User           `json:"-" gorm:"foreignKey:CreatorID"`
 	Title        string         `json:"title" gorm:"not null"`
 	Description  string         `json:"description"`
 	Type         string         `json:"type" gorm:"not null"` // image, video, text, etc.
 	MediaURL     string         `json:"media_url"`
 	ThumbnailURL string         `json:"thumbnail_url"`
+	CoverURL     string         `json:"cover_url"`
 	IsPremium    bool           `json:"is_premium" gorm:"default:false"`
 	IsPublished  bool           `json:"is_published" gorm:"default:true"`
 	ViewCount    int            `json:"view_count" gorm:"default:0"`
@@ -100,7 +101,7 @@ type Content struct {
 // SubscriptionPlan définit un plan d'abonnement créé par un créateur
 type SubscriptionPlan struct {
 	ID          uint      `json:"id" gorm:"primaryKey"`
-	CreatorID   uint      `json:"creator_id"`
+	CreatorID   string    `json:"creator_id"`
 	Creator     User      `json:"-" gorm:"foreignKey:CreatorID"`
 	Name        string    `json:"name" gorm:"not null"`
 	Description string    `json:"description"`
@@ -117,9 +118,9 @@ type SubscriptionPlan struct {
 // Subscription représente l'abonnement d'un utilisateur à un créateur
 type Subscription struct {
 	ID            uint             `json:"id" gorm:"primaryKey"`
-	SubscriberID  uint             `json:"subscriber_id"`
+	SubscriberID  string           `json:"subscriber_id"`
 	Subscriber    User             `json:"-" gorm:"foreignKey:SubscriberID"`
-	CreatorID     uint             `json:"creator_id"`
+	CreatorID     string           `json:"creator_id"`
 	Creator       User             `json:"-" gorm:"foreignKey:CreatorID"`
 	PlanID        uint             `json:"plan_id"`
 	Plan          SubscriptionPlan `json:"-" gorm:"foreignKey:PlanID"`
@@ -138,7 +139,7 @@ type Comment struct {
 	ID        uint           `json:"id" gorm:"primaryKey"`
 	ContentID uint           `json:"content_id"`
 	Content   Content        `json:"-" gorm:"foreignKey:ContentID"`
-	UserID    uint           `json:"user_id"`
+	UserID    string         `json:"user_id"`
 	User      User           `json:"-" gorm:"foreignKey:UserID"`
 	Text      string         `json:"text" gorm:"not null"`
 	IsHidden  bool           `json:"is_hidden" gorm:"default:false"`
@@ -152,7 +153,7 @@ type Like struct {
 	ID        uint      `json:"id" gorm:"primaryKey"`
 	ContentID uint      `json:"content_id"`
 	Content   Content   `json:"-" gorm:"foreignKey:ContentID"`
-	UserID    uint      `json:"user_id"`
+	UserID    string    `json:"user_id"`
 	User      User      `json:"-" gorm:"foreignKey:UserID"`
 	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime"`
 }
@@ -162,11 +163,11 @@ type Report struct {
 	ID            uint       `json:"id" gorm:"primaryKey"`
 	ContentID     uint       `json:"content_id"`
 	Content       Content    `json:"-" gorm:"foreignKey:ContentID"`
-	ReporterID    uint       `json:"reporter_id"`
+	ReporterID    string     `json:"reporter_id"`
 	Reporter      User       `json:"-" gorm:"foreignKey:ReporterID"`
 	Reason        string     `json:"reason" gorm:"not null"`
 	Status        string     `json:"status" gorm:"default:'pending'"` // pending, reviewed, dismissed
-	ReviewedBy    *uint      `json:"reviewed_by"`
+	ReviewedBy    *string    `json:"reviewed_by"`
 	ReviewerAdmin *User      `json:"-" gorm:"foreignKey:ReviewedBy"`
 	ReviewedAt    *time.Time `json:"reviewed_at"`
 	CreatedAt     time.Time  `json:"created_at" gorm:"autoCreateTime"`
@@ -176,9 +177,9 @@ type Report struct {
 // Message représente un message privé entre deux utilisateurs
 type Message struct {
 	ID          uint       `json:"id" gorm:"primaryKey"`
-	SenderID    uint       `json:"sender_id"`
+	SenderID    string     `json:"sender_id"`
 	Sender      User       `json:"-" gorm:"foreignKey:SenderID"`
-	RecipientID uint       `json:"recipient_id"`
+	RecipientID string     `json:"recipient_id"`
 	Recipient   User       `json:"-" gorm:"foreignKey:RecipientID"`
 	Content     string     `json:"content" gorm:"not null"`
 	IsRead      bool       `json:"is_read" gorm:"default:false"`
@@ -190,7 +191,7 @@ type Message struct {
 // Notification représente une notification envoyée à un utilisateur
 type Notification struct {
 	ID        uint       `json:"id" gorm:"primaryKey"`
-	UserID    uint       `json:"user_id"`
+	UserID    string     `json:"user_id"`
 	User      User       `json:"-" gorm:"foreignKey:UserID"`
 	Type      string     `json:"type" gorm:"not null"` // new_subscriber, new_comment, etc.
 	Message   string     `json:"message" gorm:"not null"`
@@ -203,7 +204,7 @@ type Notification struct {
 // Transaction représente une transaction financière
 type Transaction struct {
 	ID             uint          `json:"id" gorm:"primaryKey"`
-	UserID         uint          `json:"user_id"`
+	UserID         string        `json:"user_id"`
 	User           User          `json:"-" gorm:"foreignKey:UserID"`
 	SubscriptionID *uint         `json:"subscription_id"`
 	Subscription   *Subscription `json:"-" gorm:"foreignKey:SubscriptionID"`
@@ -220,7 +221,7 @@ type Transaction struct {
 // Payout représente un versement à un créateur
 type Payout struct {
 	ID            uint       `json:"id" gorm:"primaryKey"`
-	CreatorID     uint       `json:"creator_id"`
+	CreatorID     string     `json:"creator_id"`
 	Creator       User       `json:"-" gorm:"foreignKey:CreatorID"`
 	Amount        float64    `json:"amount" gorm:"not null"`
 	Currency      string     `json:"currency" gorm:"default:'EUR'"`
