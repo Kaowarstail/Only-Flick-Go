@@ -34,6 +34,7 @@ logs/
 .env.test.local
 .env.production.local
 config.local.json
+config.json
 
 # Base de données SQLite
 *.db

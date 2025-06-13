@@ -1,29 +1,29 @@
 package config
 
 import (
-	"encoding/json"
 	"os"
+	"strconv"
 	"sync"
 )
 
-// Configuration contient tous les paramètres de configuration de l'application
+// Configuration contient tous les paramètres de l'application
 type Configuration struct {
 	Server struct {
-		Port    string `json:"port"`
-		Timeout int    `json:"timeout"`
-	} `json:"server"`
+		Port    string
+		Timeout int
+	}
 	Database struct {
-		Host     string `json:"host"`
-		Port     string `json:"port"`
-		User     string `json:"user"`
-		Password string `json:"password"`
-		DBName   string `json:"dbname"`
-		SSLMode  string `json:"sslmode"`
-	} `json:"database"`
+		Host     string
+		Port     string
+		User     string
+		Password string
+		DBName   string
+		SSLMode  string
+	}
 	JWT struct {
-		Secret     string `json:"secret"`
-		Expiration int    `json:"expiration"` // En heures
-	} `json:"jwt"`
+		Secret     string
+		Expiration int
+	}
 }
 
 var (
@@ -31,47 +31,51 @@ var (
 	once   sync.Once
 )
 
-// Load charge la configuration à partir d'un fichier
-func Load(configFile string) (*Configuration, error) {
+// Load charge la configuration depuis les variables d’environnement
+func Load() (*Configuration, error) {
 	once.Do(func() {
 		config = &Configuration{}
 
-		// On charge les valeurs par défaut
-		config.Server.Port = "8080"
-		config.Server.Timeout = 15
-		config.Database.Host = "localhost"
-		config.Database.Port = "5432"
-		config.Database.SSLMode = "disable"
-		config.JWT.Expiration = 24
+		// Server
+		config.Server.Port = getEnv("PORT", "8080")
+		config.Server.Timeout = getEnvAsInt("TIMEOUT", 15)
 
-		// Si un fichier de config est spécifié, on le charge
-		if configFile != "" {
-			file, err := os.Open(configFile)
-			if err != nil {
-				return
-			}
-			defer file.Close()
+		// Database
+		config.Database.Host = getEnv("DB_HOST", "localhost")
+		config.Database.Port = getEnv("DB_PORT", "5432")
+		config.Database.User = getEnv("DB_USER", "postgres")
+		config.Database.Password = getEnv("DB_PASSWORD", "")
+		config.Database.DBName = getEnv("DB_NAME", "")
+		config.Database.SSLMode = getEnv("DB_SSLMODE", "disable")
 
-			decoder := json.NewDecoder(file)
-			if err := decoder.Decode(config); err != nil {
-				return
-			}
-		}
-
-		// On écrase avec les variables d'environnement si elles existent
-		if port := os.Getenv("PORT"); port != "" {
-			config.Server.Port = port
-		}
-		// Autres variables d'environnement...
+		// JWT
+		config.JWT.Secret = getEnv("JWT_SECRET", "my-secret")
+		config.JWT.Expiration = getEnvAsInt("JWT_EXPIRATION", 24)
 	})
-
 	return config, nil
 }
 
 // Get retourne la configuration
 func Get() *Configuration {
 	if config == nil {
-		_, _ = Load("")
+		_, _ = Load()
 	}
 	return config
+}
+
+// Helpers
+func getEnv(key string, defaultValue string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return defaultValue
+}
+
+func getEnvAsInt(key string, defaultVal int) int {
+	if valStr := os.Getenv(key); valStr != "" {
+		if val, err := strconv.Atoi(valStr); err == nil {
+			return val
+		}
+	}
+	return defaultVal
 }
