@@ -257,11 +257,7 @@ func BecomeCreator(w http.ResponseWriter, r *http.Request) {
 // UpdateCreator met à jour les informations d'un créateur
 func UpdateCreator(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	id, err := strconv.Atoi(vars["id"])
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "ID créateur invalide")
-		return
-	}
+	id := vars["id"]
 
 	// Extraire l'ID utilisateur du contexte
 	userID, ok := middleware.GetUserIDFromContext(r.Context())
@@ -271,7 +267,7 @@ func UpdateCreator(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Vérifier si l'utilisateur authentifié est bien le créateur
-	if userID != uint(id) {
+	if userID != id {
 		// Vérifier si c'est un admin
 		userRole, _ := r.Context().Value(middleware.UserRoleKey).(string)
 		if userRole != string(models.RoleAdmin) {
