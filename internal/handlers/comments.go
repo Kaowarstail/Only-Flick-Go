@@ -147,7 +147,11 @@ func AddComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Créer le commentaire
-	contentIDUint, _ := strconv.ParseUint(contentID, 10, 32)
+	contentIDUint, err := strconv.ParseUint(contentID, 10, 32)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "ID de contenu invalide")
+		return
+	}
 	comment := models.Comment{
 		ContentID: uint(contentIDUint),
 		UserID:    userID,

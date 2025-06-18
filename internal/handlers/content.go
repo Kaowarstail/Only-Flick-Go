@@ -545,7 +545,10 @@ func UploadContentMedia(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Limite de taille de fichier (50MB)
-	r.ParseMultipartForm(50 << 20)
+	if err := r.ParseMultipartForm(50 << 20); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Erreur lors de l'analyse du formulaire multipart")
+		return
+	}
 
 	// Récupérer le fichier depuis la requête
 	file, handler, err := r.FormFile("media")
