@@ -18,21 +18,12 @@ func RegisterAuthRoutes(router *mux.Router) {
 	auth.HandleFunc("/login", handlers.Login).Methods("POST")
 	auth.HandleFunc("/logout", handlers.Logout).Methods("POST")
 	auth.HandleFunc("/refresh-token", handlers.RefreshToken).Methods("POST")
-	auth.HandleFunc("/reset-password", handleRequestResetPassword).Methods("POST")
-	auth.HandleFunc("/reset-password/{token}", handleResetPassword).Methods("PUT")
+	auth.HandleFunc("/reset-password", handlers.RequestPasswordReset).Methods("POST")
+	auth.HandleFunc("/reset-password/{token}", handlers.ResetPassword).Methods("PUT")
+	auth.HandleFunc("/verify-email/{token}", handlers.VerifyEmail).Methods("GET")
 
 	// Routes protégées d'authentification
 	auth.Handle("/me", middleware.JWTAuth(http.HandlerFunc(handlers.GetCurrentUser))).Methods("GET")
+	auth.Handle("/resend-verification", middleware.JWTAuth(http.HandlerFunc(handlers.ResendEmailVerification))).Methods("POST")
+	auth.Handle("/change-password", middleware.JWTAuth(http.HandlerFunc(handlers.ChangePassword))).Methods("PUT")
 }
-
-// Certains gestionnaires sont encore à implémenter
-var (
-	handleRequestResetPassword = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotImplemented)
-		w.Write([]byte("Réinitialisation de mot de passe non encore implémentée"))
-	})
-	handleResetPassword = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotImplemented)
-		w.Write([]byte("Réinitialisation de mot de passe non encore implémentée"))
-	})
-)

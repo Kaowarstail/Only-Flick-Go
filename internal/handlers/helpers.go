@@ -1,25 +1,25 @@
 package handlers
 
 import (
-    "encoding/json"
-    "net/http"
+	"encoding/json"
+	"net/http"
 )
 
-// RespondWithError envoie une réponse d'erreur au format JSON
-func RespondWithError(w http.ResponseWriter, code int, message string) {
-    RespondWithJSON(w, code, map[string]string{"error": message})
+// respondWithError envoie une réponse d'erreur au format JSON
+func respondWithError(w http.ResponseWriter, code int, message string) {
+	respondWithJSON(w, code, map[string]string{"error": message})
 }
 
-// RespondWithJSON envoie une réponse au format JSON
-func RespondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
-    response, err := json.Marshal(payload)
-    if err != nil {
-        w.WriteHeader(http.StatusInternalServerError)
-        w.Write([]byte("Erreur lors de la sérialisation de la réponse"))
-        return
-    }
+// respondWithJSON envoie une réponse au format JSON
+func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
+	response, err := json.Marshal(payload)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Erreur lors de la sérialisation de la réponse"))
+		return
+	}
 
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(code)
-    w.Write(response)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	w.Write(response)
 }

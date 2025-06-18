@@ -17,21 +17,22 @@ const (
 
 // User représente un utilisateur du système
 type User struct {
-	ID             string     `json:"id" gorm:"primaryKey"`
-	Username       string     `json:"username" gorm:"uniqueIndex;not null"`
-	Email          string     `json:"email" gorm:"uniqueIndex;not null"`
-	Password       string     `json:"-" gorm:"not null"` // Le "-" signifie que ce champ ne sera pas inclus dans la sérialisation JSON
-	FirstName      string     `json:"first_name"`
-	LastName       string     `json:"last_name"`
-	Role           UserRole   `json:"role" gorm:"type:varchar(20);default:'subscriber'"`
-	Biography      string     `json:"biography"`
-	ProfilePicture string     `json:"profile_picture"`
-	IsActive       bool       `json:"is_active" gorm:"default:true"`
-	IsBanned       bool       `json:"is_banned" gorm:"default:false"`
-	BanReason      string     `json:"ban_reason"`
-	LastLogin      *time.Time `json:"last_login"`
-	CreatedAt      time.Time  `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt      time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
+	ID              string     `json:"id" gorm:"primaryKey"`
+	Username        string     `json:"username" gorm:"uniqueIndex;not null"`
+	Email           string     `json:"email" gorm:"uniqueIndex;not null"`
+	Password        string     `json:"-" gorm:"not null"` // Le "-" signifie que ce champ ne sera pas inclus dans la sérialisation JSON
+	FirstName       string     `json:"first_name"`
+	LastName        string     `json:"last_name"`
+	Role            UserRole   `json:"role" gorm:"type:varchar(20);default:'subscriber'"`
+	Biography       string     `json:"biography"`
+	ProfilePicture  string     `json:"profile_picture"`
+	IsActive        bool       `json:"is_active" gorm:"default:true"`
+	IsBanned        bool       `json:"is_banned" gorm:"default:false"`
+	BanReason       string     `json:"ban_reason"`
+	IsEmailVerified bool       `json:"is_email_verified" gorm:"default:false"`
+	LastLogin       *time.Time `json:"last_login"`
+	CreatedAt       time.Time  `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt       time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
 
 	// Relations
 	Contents          []Content          `json:"-" gorm:"foreignKey:CreatorID"`

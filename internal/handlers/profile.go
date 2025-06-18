@@ -27,15 +27,11 @@ type NotificationSettings struct {
 func UploadProfilePicture(w http.ResponseWriter, r *http.Request) {
 	// Extraire l'ID utilisateur depuis l'URL
 	vars := mux.Vars(r)
-	id, err := strconv.Atoi(vars["id"])
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "ID utilisateur invalide")
-		return
-	}
+	id := vars["id"]
 
 	// Vérifier si l'utilisateur connecté a le droit de modifier ce profil
 	userID, ok := middleware.GetUserIDFromContext(r.Context())
-	if !ok || uint(id) != userID {
+	if !ok || id != userID {
 		respondWithError(w, http.StatusForbidden, "Vous n'êtes pas autorisé à modifier ce profil")
 		return
 	}
@@ -89,15 +85,15 @@ func UploadProfilePicture(w http.ResponseWriter, r *http.Request) {
 // GetFollowing récupère la liste des utilisateurs suivis par un utilisateur
 func GetFollowing(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	id, err := strconv.Atoi(vars["id"])
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "ID utilisateur invalide")
+	id := vars["id"]
+	if id == "" {
+		respondWithError(w, http.StatusBadRequest, "ID utilisateur requis")
 		return
 	}
 
 	// Vérifier si l'utilisateur existe
 	var user models.User
-	result := database.GetDB().First(&user, id)
+	result := database.GetDB().First(&user, "id = ?", id)
 	if result.Error != nil {
 		respondWithError(w, http.StatusNotFound, "Utilisateur non trouvé")
 		return
@@ -113,24 +109,15 @@ func GetFollowing(w http.ResponseWriter, r *http.Request) {
 // BlockUser bloque un utilisateur
 func BlockUser(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	userID, err := strconv.Atoi(vars["id"])
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "ID utilisateur invalide")
-		return
-	}
-	targetID, err := strconv.Atoi(vars["targetId"])
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "ID cible invalide")
-		return
-	}
+	userID := vars["id"]
+	targetID := vars["targetId"]
 
-	// On va utiliser targetID lors de l'implémentation complète
-	// Pour l'instant, on le marque comme utilisé pour éviter l'erreur de compilation
+	// TODO: Utiliser targetID pour l'implémentation complète du blocage
 	_ = targetID
 
 	// Vérifier si l'utilisateur connecté est bien l'utilisateur qui fait la demande
 	currentUserID, ok := middleware.GetUserIDFromContext(r.Context())
-	if !ok || uint(userID) != currentUserID {
+	if !ok || userID != currentUserID {
 		respondWithError(w, http.StatusForbidden, "Vous n'êtes pas autorisé à effectuer cette action")
 		return
 	}
@@ -146,24 +133,15 @@ func BlockUser(w http.ResponseWriter, r *http.Request) {
 // UnblockUser débloque un utilisateur
 func UnblockUser(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	userID, err := strconv.Atoi(vars["id"])
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "ID utilisateur invalide")
-		return
-	}
-	targetID, err := strconv.Atoi(vars["targetId"])
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "ID cible invalide")
-		return
-	}
+	userID := vars["id"]
+	targetID := vars["targetId"]
 
-	// On va utiliser targetID lors de l'implémentation complète
-	// Pour l'instant, on le marque comme utilisé pour éviter l'erreur de compilation
+	// TODO: Utiliser targetID pour l'implémentation complète du déblocage
 	_ = targetID
 
 	// Vérifier si l'utilisateur connecté est bien l'utilisateur qui fait la demande
 	currentUserID, ok := middleware.GetUserIDFromContext(r.Context())
-	if !ok || uint(userID) != currentUserID {
+	if !ok || userID != currentUserID {
 		respondWithError(w, http.StatusForbidden, "Vous n'êtes pas autorisé à effectuer cette action")
 		return
 	}
@@ -179,15 +157,11 @@ func UnblockUser(w http.ResponseWriter, r *http.Request) {
 // GetBlockedUsers récupère la liste des utilisateurs bloqués par un utilisateur
 func GetBlockedUsers(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	id, err := strconv.Atoi(vars["id"])
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "ID utilisateur invalide")
-		return
-	}
+	id := vars["id"]
 
 	// Vérifier si l'utilisateur connecté est bien l'utilisateur qui fait la demande
 	currentUserID, ok := middleware.GetUserIDFromContext(r.Context())
-	if !ok || uint(id) != currentUserID {
+	if !ok || id != currentUserID {
 		respondWithError(w, http.StatusForbidden, "Vous n'êtes pas autorisé à effectuer cette action")
 		return
 	}
@@ -202,15 +176,15 @@ func GetBlockedUsers(w http.ResponseWriter, r *http.Request) {
 // UpdateNotificationSettings met à jour les paramètres de notification d'un utilisateur
 func UpdateNotificationSettings(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	id, err := strconv.Atoi(vars["id"])
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "ID utilisateur invalide")
+	id := vars["id"]
+	if id == "" {
+		respondWithError(w, http.StatusBadRequest, "ID utilisateur requis")
 		return
 	}
 
 	// Vérifier si l'utilisateur connecté est bien l'utilisateur qui fait la demande
 	currentUserID, ok := middleware.GetUserIDFromContext(r.Context())
-	if !ok || uint(id) != currentUserID {
+	if !ok || id != currentUserID {
 		respondWithError(w, http.StatusForbidden, "Vous n'êtes pas autorisé à effectuer cette action")
 		return
 	}
@@ -234,15 +208,15 @@ func UpdateNotificationSettings(w http.ResponseWriter, r *http.Request) {
 // GetFeed récupère le flux d'activités d'un utilisateur
 func GetFeed(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	id, err := strconv.Atoi(vars["id"])
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "ID utilisateur invalide")
+	id := vars["id"]
+	if id == "" {
+		respondWithError(w, http.StatusBadRequest, "ID utilisateur requis")
 		return
 	}
 
 	// Vérifier si l'utilisateur connecté est bien l'utilisateur qui fait la demande
 	currentUserID, ok := middleware.GetUserIDFromContext(r.Context())
-	if !ok || uint(id) != currentUserID {
+	if !ok || id != currentUserID {
 		respondWithError(w, http.StatusForbidden, "Vous n'êtes pas autorisé à effectuer cette action")
 		return
 	}

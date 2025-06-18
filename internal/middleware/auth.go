@@ -8,6 +8,7 @@ import (
 	"github.com/dgrijalva/jwt-go"
 
 	"github.com/Kaowarstail/Only-Flick-Go/config"
+	"github.com/Kaowarstail/Only-Flick-Go/internal/utils"
 )
 
 // Clés de contexte pour stocker des informations dans la requête HTTP
@@ -37,6 +38,12 @@ func JWTAuth(next http.Handler) http.Handler {
 
 		tokenString := bearerToken[1]
 
+		// Vérifier si le token est en liste noire
+		if utils.IsJWTTokenBlacklisted(tokenString) {
+			http.Error(w, "Token révoqué", http.StatusUnauthorized)
+			return
+		}
+
 		// Vérification du token
 		claims := jwt.MapClaims{}
 		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
@@ -49,7 +56,12 @@ func JWTAuth(next http.Handler) http.Handler {
 		}
 
 		// Extraction des informations utilisateur du token
-		userID := uint(claims["user_id"].(float64))
+		userID, ok := claims["user_id"].(string)
+		if !ok {
+			http.Error(w, "Token invalide: ID utilisateur manquant", http.StatusUnauthorized)
+			return
+		}
+
 		userRole, _ := claims["role"].(string)
 
 		// Ajout de l'ID utilisateur et du rôle au contexte de la requête
@@ -62,7 +74,7 @@ func JWTAuth(next http.Handler) http.Handler {
 }
 
 // GetUserIDFromContext extrait l'ID utilisateur du contexte
-func GetUserIDFromContext(ctx context.Context) (uint, bool) {
-	userID, ok := ctx.Value(UserIDKey).(uint)
+func GetUserIDFromContext(ctx context.Context) (string, bool) {
+	userID, ok := ctx.Value(UserIDKey).(string)
 	return userID, ok
 }
