@@ -15,6 +15,7 @@ func RegisterContentRoutes(router *mux.Router) {
 	router.HandleFunc("/contents/{id}", handlers.GetContent).Methods("GET")
 	router.HandleFunc("/contents/search", handlers.SearchContents).Methods("GET")
 	router.HandleFunc("/contents/trending", handlers.GetTrendingContents).Methods("GET")
+	router.HandleFunc("/feed", handlers.GetPublicFeed).Methods("GET")
 	router.HandleFunc("/contents/{id}/comments", handlers.GetContentComments).Methods("GET")
 
 	// Routes protégées pour le contenu

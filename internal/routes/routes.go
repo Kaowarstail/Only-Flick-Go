@@ -23,7 +23,7 @@ func RegisterRoutes(router *mux.Router) {
 
 	// Middleware CORS pour les routes API aussi (sécurité)
 	apiV1.Use(middleware.CORS)
-	
+
 	// Middleware global pour la journalisation
 	apiV1.Use(middleware.Logger)
 

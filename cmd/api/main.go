@@ -8,6 +8,7 @@ import (
 
 	"github.com/Kaowarstail/Only-Flick-Go/config"
 	"github.com/Kaowarstail/Only-Flick-Go/internal/database"
+	"github.com/Kaowarstail/Only-Flick-Go/internal/routes"
 	"github.com/Kaowarstail/Only-Flick-Go/seed"
 	"github.com/gorilla/mux"
 	_ "github.com/joho/godotenv/autoload"
@@ -33,7 +34,7 @@ func main() {
 
 	// Setup du routeur
 	router := mux.NewRouter()
-	registerRoutes(router)
+	routes.RegisterRoutes(router)
 
 	// Démarrage du serveur
 	port := config.Get().Server.Port
