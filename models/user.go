@@ -234,6 +234,42 @@ type Payout struct {
 	UpdatedAt     time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
+// Follow représente une relation de suivi entre deux utilisateurs
+type Follow struct {
+	ID         uint      `json:"id" gorm:"primaryKey"`
+	FollowerID string    `json:"follower_id"`
+	Follower   User      `json:"-" gorm:"foreignKey:FollowerID"`
+	FollowedID string    `json:"followed_id"`
+	Followed   User      `json:"-" gorm:"foreignKey:FollowedID"`
+	CreatedAt  time.Time `json:"created_at" gorm:"autoCreateTime"`
+}
+
+// Block représente un blocage d'un utilisateur par un autre
+type Block struct {
+	ID        uint      `json:"id" gorm:"primaryKey"`
+	BlockerID string    `json:"blocker_id"`
+	Blocker   User      `json:"-" gorm:"foreignKey:BlockerID"`
+	BlockedID string    `json:"blocked_id"`
+	Blocked   User      `json:"-" gorm:"foreignKey:BlockedID"`
+	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime"`
+}
+
+// NotificationSettings représente les paramètres de notification d'un utilisateur
+type NotificationSettings struct {
+	ID                   uint   `json:"id" gorm:"primaryKey"`
+	UserID               string `json:"user_id" gorm:"uniqueIndex"`
+	User                 User   `json:"-" gorm:"foreignKey:UserID"`
+	EmailNotifications   bool   `json:"email_notifications" gorm:"default:true"`
+	PushNotifications    bool   `json:"push_notifications" gorm:"default:true"`
+	MessageNotifications bool   `json:"message_notifications" gorm:"default:true"`
+	CommentNotifications bool   `json:"comment_notifications" gorm:"default:true"`
+	LikeNotifications    bool   `json:"like_notifications" gorm:"default:true"`
+	FollowNotifications  bool   `json:"follow_notifications" gorm:"default:true"`
+	ContentNotifications bool   `json:"content_notifications" gorm:"default:true"`
+	CreatedAt            time.Time `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt            time.Time `json:"updated_at" gorm:"autoUpdateTime"`
+}
+
 // ToResponse convertit un User en UserResponse
 func (u *User) ToResponse() UserResponse {
 	return UserResponse{

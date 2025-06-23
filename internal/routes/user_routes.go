@@ -19,6 +19,8 @@ func RegisterUserRoutes(router *mux.Router) {
 	router.Handle("/users/{id}", middleware.JWTAuth(http.HandlerFunc(handlers.DeleteUser))).Methods("DELETE")
 	router.Handle("/users/{id}/profile-pic", middleware.JWTAuth(http.HandlerFunc(handlers.UploadProfilePicture))).Methods("PUT")
 	router.Handle("/users/{id}/following", middleware.JWTAuth(http.HandlerFunc(handlers.GetFollowing))).Methods("GET")
+	router.Handle("/users/{id}/follow/{targetId}", middleware.JWTAuth(http.HandlerFunc(handlers.FollowUser))).Methods("POST")
+	router.Handle("/users/{id}/follow/{targetId}", middleware.JWTAuth(http.HandlerFunc(handlers.UnfollowUser))).Methods("DELETE")
 	router.Handle("/users/{id}/block/{targetId}", middleware.JWTAuth(http.HandlerFunc(handlers.BlockUser))).Methods("POST")
 	router.Handle("/users/{id}/block/{targetId}", middleware.JWTAuth(http.HandlerFunc(handlers.UnblockUser))).Methods("DELETE")
 	router.Handle("/users/{id}/blocked", middleware.JWTAuth(http.HandlerFunc(handlers.GetBlockedUsers))).Methods("GET")
