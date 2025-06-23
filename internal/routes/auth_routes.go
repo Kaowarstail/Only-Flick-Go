@@ -14,16 +14,16 @@ func RegisterAuthRoutes(router *mux.Router) {
 	auth := router.PathPrefix("/auth").Subrouter()
 
 	// Routes publiques d'authentification
-	auth.HandleFunc("/register", handlers.Register).Methods("POST")
-	auth.HandleFunc("/login", handlers.Login).Methods("POST")
-	auth.HandleFunc("/logout", handlers.Logout).Methods("POST")
-	auth.HandleFunc("/refresh-token", handlers.RefreshToken).Methods("POST")
-	auth.HandleFunc("/reset-password", handlers.RequestPasswordReset).Methods("POST")
-	auth.HandleFunc("/reset-password/{token}", handlers.ResetPassword).Methods("PUT")
-	auth.HandleFunc("/verify-email/{token}", handlers.VerifyEmail).Methods("GET")
+	auth.HandleFunc("/register", handlers.Register).Methods("POST", "OPTIONS")
+	auth.HandleFunc("/login", handlers.Login).Methods("POST", "OPTIONS")
+	auth.HandleFunc("/logout", handlers.Logout).Methods("POST", "OPTIONS")
+	auth.HandleFunc("/refresh-token", handlers.RefreshToken).Methods("POST", "OPTIONS")
+	auth.HandleFunc("/reset-password", handlers.RequestPasswordReset).Methods("POST", "OPTIONS")
+	auth.HandleFunc("/reset-password/{token}", handlers.ResetPassword).Methods("PUT", "OPTIONS")
+	auth.HandleFunc("/verify-email/{token}", handlers.VerifyEmail).Methods("GET", "OPTIONS")
 
 	// Routes protégées d'authentification
-	auth.Handle("/me", middleware.JWTAuth(http.HandlerFunc(handlers.GetCurrentUser))).Methods("GET")
-	auth.Handle("/resend-verification", middleware.JWTAuth(http.HandlerFunc(handlers.ResendEmailVerification))).Methods("POST")
-	auth.Handle("/change-password", middleware.JWTAuth(http.HandlerFunc(handlers.ChangePassword))).Methods("PUT")
+	auth.Handle("/me", middleware.JWTAuth(http.HandlerFunc(handlers.GetCurrentUser))).Methods("GET", "OPTIONS")
+	auth.Handle("/resend-verification", middleware.JWTAuth(http.HandlerFunc(handlers.ResendEmailVerification))).Methods("POST", "OPTIONS")
+	auth.Handle("/change-password", middleware.JWTAuth(http.HandlerFunc(handlers.ChangePassword))).Methods("PUT", "OPTIONS")
 }

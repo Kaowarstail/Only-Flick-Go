@@ -9,15 +9,21 @@ import (
 
 // RegisterRoutes configure toutes les routes de l'API
 func RegisterRoutes(router *mux.Router) {
+	// Middleware CORS global pour toutes les routes (DOIT être en premier)
+	router.Use(middleware.CORS)
+
 	// Route pour la racine "/"
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Bienvenue sur l'API OnlyFlick"))
-	}).Methods("GET")
+	}).Methods("GET", "OPTIONS")
 
 	// API versioning
 	apiV1 := router.PathPrefix("/api/v1").Subrouter()
 
+	// Middleware CORS pour les routes API aussi (sécurité)
+	apiV1.Use(middleware.CORS)
+	
 	// Middleware global pour la journalisation
 	apiV1.Use(middleware.Logger)
 
@@ -25,7 +31,7 @@ func RegisterRoutes(router *mux.Router) {
 	apiV1.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
-	}).Methods("GET")
+	}).Methods("GET", "OPTIONS")
 
 	// Enregistrement des différentes catégories de routes
 	RegisterAuthRoutes(apiV1)
