@@ -3,12 +3,14 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/Kaowarstail/Only-Flick-Go/config"
 	"github.com/Kaowarstail/Only-Flick-Go/internal/database"
+	"github.com/Kaowarstail/Only-Flick-Go/seed"
 	"github.com/gorilla/mux"
-	_ "github.com/joho/godotenv/autoload" // Charge automatiquement le fichier .env
+	_ "github.com/joho/godotenv/autoload"
 )
 
 func main() {
@@ -23,6 +25,11 @@ func main() {
 		log.Fatal("❌ Erreur d'initialisation de la base de données :", err)
 	}
 	log.Println("📦 Connexion à la base de données réussie ✅")
+
+	// 🌱 Optionnel : seed des données si SEED=true
+	if os.Getenv("SEED") == "true" {
+		seed.Run()
+	}
 
 	// Setup du routeur
 	router := mux.NewRouter()
