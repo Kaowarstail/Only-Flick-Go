@@ -18,16 +18,17 @@ func RegisterContentRoutes(router *mux.Router) {
 	router.HandleFunc("/contents/{id}/comments", handlers.GetContentComments).Methods("GET")
 
 	// Routes protégées pour le contenu
-	router.Handle("/contents", middleware.JWTAuth(http.HandlerFunc(handlers.CreateContent))).Methods("POST")
-	router.Handle("/contents/{id}", middleware.JWTAuth(http.HandlerFunc(handlers.UpdateContent))).Methods("PUT")
-	router.Handle("/contents/{id}", middleware.JWTAuth(http.HandlerFunc(handlers.DeleteContent))).Methods("DELETE")
-	router.Handle("/contents/{id}/media", middleware.JWTAuth(http.HandlerFunc(handlers.UploadContentMedia))).Methods("POST")
-	router.Handle("/contents/{id}/thumbnail", middleware.JWTAuth(http.HandlerFunc(handlers.UploadContentThumbnail))).Methods("POST")
-	router.Handle("/contents/{id}/comments", middleware.JWTAuth(http.HandlerFunc(handlers.AddComment))).Methods("POST")
-	router.Handle("/contents/{id}/likes", middleware.JWTAuth(http.HandlerFunc(handlers.LikeContent))).Methods("POST")
-	router.Handle("/contents/{id}/likes", middleware.JWTAuth(http.HandlerFunc(handlers.UnlikeContent))).Methods("DELETE")
+	router.Handle("/contents", middleware.JWTAuth(http.HandlerFunc(handlers.CreateContent))).Methods("POST", "OPTIONS")
+	router.Handle("/contents/{id}", middleware.JWTAuth(http.HandlerFunc(handlers.UpdateContent))).Methods("PUT", "OPTIONS")
+	router.Handle("/contents/{id}", middleware.JWTAuth(http.HandlerFunc(handlers.DeleteContent))).Methods("DELETE", "OPTIONS")
+	router.Handle("/contents/{id}/media", middleware.JWTAuth(http.HandlerFunc(handlers.UploadContentMedia))).Methods("POST", "OPTIONS")
+	router.Handle("/contents/{id}/thumbnail", middleware.JWTAuth(http.HandlerFunc(handlers.UploadContentThumbnail))).Methods("POST", "OPTIONS")
+	router.Handle("/contents/{id}/comments", middleware.JWTAuth(http.HandlerFunc(handlers.AddComment))).Methods("POST", "OPTIONS")
+	router.Handle("/contents/{id}/likes", middleware.JWTAuth(http.HandlerFunc(handlers.LikeContent))).Methods("POST", "OPTIONS")
+	router.Handle("/contents/{id}/likes", middleware.JWTAuth(http.HandlerFunc(handlers.UnlikeContent))).Methods("DELETE", "OPTIONS")
+	router.Handle("/contents/{id}/toggle-like", middleware.JWTAuth(http.HandlerFunc(handlers.ToggleLike))).Methods("POST", "OPTIONS")
 
 	// Routes pour les commentaires
-	router.Handle("/comments/{id}", middleware.JWTAuth(http.HandlerFunc(handlers.UpdateComment))).Methods("PUT")
-	router.Handle("/comments/{id}", middleware.JWTAuth(http.HandlerFunc(handlers.DeleteComment))).Methods("DELETE")
+	router.Handle("/comments/{id}", middleware.JWTAuth(http.HandlerFunc(handlers.UpdateComment))).Methods("PUT", "OPTIONS")
+	router.Handle("/comments/{id}", middleware.JWTAuth(http.HandlerFunc(handlers.DeleteComment))).Methods("DELETE", "OPTIONS")
 }

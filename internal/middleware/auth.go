@@ -22,6 +22,12 @@ const (
 // JWTAuth authentifie les requêtes à l'aide de JWT
 func JWTAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Permettre les requêtes preflight OPTIONS sans authentification
+		if r.Method == "OPTIONS" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		
 		// Récupération du token depuis l'en-tête Authorization
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
