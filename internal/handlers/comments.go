@@ -456,3 +456,75 @@ func GetContentLikes(w http.ResponseWriter, r *http.Request) {
 
 	respondWithJSON(w, http.StatusOK, response)
 }
+
+// ToggleLike basculer entre like et unlike pour un contenu
+func ToggleLike(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	contentID := vars["id"]
+
+	// Récupérer l'ID utilisateur du contexte
+	userID, ok := r.Context().Value(middleware.UserIDKey).(string)
+	if !ok {
+		respondWithError(w, http.StatusInternalServerError, "Impossible d'extraire l'ID utilisateur")
+		return
+	}
+
+	// Vérifier que le contenu existe et est accessible
+	var content models.Content
+	result := database.GetDB().First(&content, "id = ?", contentID)
+	if result.Error != nil {
+		respondWithError(w, http.StatusNotFound, "Contenu non trouvé")
+		return
+	}
+
+	// Vérifier si le contenu est publié
+	if !content.IsPublished || content.IsFlagged {
+		respondWithError(w, http.StatusNotFound, "Contenu non trouvé")
+		return
+	}
+
+	// Vérifier si l'utilisateur a déjà liké ce contenu
+	var existingLike models.Like
+	contentIDUint, _ := strconv.ParseUint(contentID, 10, 32)
+	result = database.GetDB().Where("content_id = ? AND user_id = ?", contentIDUint, userID).First(&existingLike)
+	
+	var liked bool
+	
+	if result.Error == nil {
+		// L'utilisateur a déjà liké, on supprime le like
+		result = database.GetDB().Delete(&existingLike)
+		if result.Error != nil {
+			respondWithError(w, http.StatusInternalServerError, "Erreur lors de la suppression du like")
+			return
+		}
+		liked = false
+	} else {
+		// L'utilisateur n'a pas encore liké, on ajoute le like
+		like := models.Like{
+			ContentID: uint(contentIDUint),
+			UserID:    userID,
+		}
+
+		result = database.GetDB().Create(&like)
+		if result.Error != nil {
+			respondWithError(w, http.StatusInternalServerError, "Erreur lors de l'ajout du like")
+			return
+		}
+		liked = true
+	}
+
+	// Compter le nombre total de likes pour ce contenu
+	var likeCount int64
+	database.GetDB().Model(&models.Like{}).Where("content_id = ?", contentIDUint).Count(&likeCount)
+
+	respondWithJSON(w, http.StatusOK, map[string]interface{}{
+		"liked":      liked,
+		"like_count": likeCount,
+		"message":    func() string {
+			if liked {
+				return "Contenu liké avec succès"
+			}
+			return "Like supprimé avec succès"
+		}(),
+	})
+}

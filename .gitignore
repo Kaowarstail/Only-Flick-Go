@@ -55,4 +55,5 @@ Thumbs.db
 # Fichiers de test de couverture
 coverage.txt
 *.cover
-*.coverprofile
+*.coverprofile.env
+.env

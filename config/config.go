@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -23,6 +24,11 @@ type Configuration struct {
 	JWT struct {
 		Secret     string
 		Expiration int
+	}
+	CORS struct {
+		AllowedOrigins   []string
+		AllowCredentials bool
+		MaxAge           int
 	}
 }
 
@@ -51,6 +57,16 @@ func Load() (*Configuration, error) {
 		// JWT
 		config.JWT.Secret = getEnv("JWT_SECRET", "my-secret")
 		config.JWT.Expiration = getEnvAsInt("JWT_EXPIRATION", 24)
+
+		// CORS
+		config.CORS.AllowedOrigins = getEnvAsSlice("CORS_ALLOWED_ORIGINS", []string{
+			"http://localhost:3000",
+			"http://localhost:49219",
+			"http://127.0.0.1:3000",
+			"http://127.0.0.1:49219",
+		})
+		config.CORS.AllowCredentials = getEnvAsBool("CORS_ALLOW_CREDENTIALS", true)
+		config.CORS.MaxAge = getEnvAsInt("CORS_MAX_AGE", 86400)
 	})
 	return config, nil
 }
@@ -76,6 +92,26 @@ func getEnvAsInt(key string, defaultVal int) int {
 		if val, err := strconv.Atoi(valStr); err == nil {
 			return val
 		}
+	}
+	return defaultVal
+}
+
+func getEnvAsBool(key string, defaultVal bool) bool {
+	if valStr := os.Getenv(key); valStr != "" {
+		if val, err := strconv.ParseBool(valStr); err == nil {
+			return val
+		}
+	}
+	return defaultVal
+}
+
+func getEnvAsSlice(key string, defaultVal []string) []string {
+	if valStr := os.Getenv(key); valStr != "" {
+		var result []string
+		for _, v := range strings.Split(valStr, ",") {
+			result = append(result, strings.TrimSpace(v))
+		}
+		return result
 	}
 	return defaultVal
 }
