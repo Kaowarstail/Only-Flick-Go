@@ -337,14 +337,22 @@ func DeleteContent(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetCreatorContents récupère tous les contenus d'un créateur
+// GetCreatorContents récupère tous les contenus d'un créateur organisés par statut premium
 func GetCreatorContents(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	creatorID := vars["id"]
 
+	// Vérifier que le créateur existe
+	var creator models.User
+	result := database.GetDB().First(&creator, "id = ? AND role = ?", creatorID, models.RoleCreator)
+	if result.Error != nil {
+		respondWithError(w, http.StatusNotFound, "Créateur non trouvé")
+		return
+	}
+
 	// Pagination
 	page := 1
-	pageSize := 10
+	pageSize := 20
 
 	if pageParam := r.URL.Query().Get("page"); pageParam != "" {
 		if p, err := strconv.Atoi(pageParam); err == nil && p > 0 {
@@ -362,38 +370,66 @@ func GetCreatorContents(w http.ResponseWriter, r *http.Request) {
 	userID, _ := r.Context().Value(middleware.UserIDKey).(string)
 	isOwner := userID == creatorID
 
-	// Construction de la requête
-	query := database.GetDB().Model(&models.Content{}).Where("creator_id = ?", creatorID)
+	// Construire les conditions de base
+	baseConditions := "creator_id = ?"
+	baseArgs := []interface{}{creatorID}
 
 	// Si ce n'est pas le propriétaire, ne montrer que les contenus publiés et non signalés
 	if !isOwner {
-		query = query.Where("is_published = ? AND is_flagged = ?", true, false)
+		baseConditions += " AND is_published = ? AND is_flagged = ?"
+		baseArgs = append(baseArgs, true, false)
 	}
 
-	// Compter le total
-	var total int64
-	query.Count(&total)
+	// Récupérer les contenus gratuits
+	var freeContents []models.Content
+	freeConditions := baseConditions + " AND is_premium = ?"
+	freeArgs := append(baseArgs, false)
 
-	// Récupérer les contenus
-	var contents []models.Content
+	freeQuery := database.GetDB().Model(&models.Content{}).Where(freeConditions, freeArgs...)
+	var totalFree int64
+	freeQuery.Count(&totalFree)
+
 	offset := (page - 1) * pageSize
-	result := query.Offset(offset).Limit(pageSize).Order("created_at DESC").Find(&contents)
+	freeQuery.Offset(offset).Limit(pageSize).Order("created_at DESC").Find(&freeContents)
 
-	if result.Error != nil {
-		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la récupération des contenus")
-		return
-	}
+	// Récupérer les contenus premium
+	var premiumContents []models.Content
+	premiumConditions := baseConditions + " AND is_premium = ?"
+	premiumArgs := append(baseArgs, true)
+
+	premiumQuery := database.GetDB().Model(&models.Content{}).Where(premiumConditions, premiumArgs...)
+	var totalPremium int64
+	premiumQuery.Count(&totalPremium)
+
+	premiumQuery.Offset(offset).Limit(pageSize).Order("created_at DESC").Find(&premiumContents)
 
 	// Calculer les métadonnées de pagination
-	totalPages := (int(total) + pageSize - 1) / pageSize
+	totalFreePages := (int(totalFree) + pageSize - 1) / pageSize
+	totalPremiumPages := (int(totalPremium) + pageSize - 1) / pageSize
 
 	response := map[string]interface{}{
-		"contents": contents,
-		"pagination": map[string]interface{}{
-			"page":        page,
-			"size":        pageSize,
-			"total_items": total,
-			"total_pages": totalPages,
+		"creator": map[string]interface{}{
+			"id":       creator.ID,
+			"username": creator.Username,
+			"email":    creator.Email,
+		},
+		"free_content": map[string]interface{}{
+			"contents": freeContents,
+			"pagination": map[string]interface{}{
+				"page":        page,
+				"size":        pageSize,
+				"total_items": totalFree,
+				"total_pages": totalFreePages,
+			},
+		},
+		"premium_content": map[string]interface{}{
+			"contents": premiumContents,
+			"pagination": map[string]interface{}{
+				"page":        page,
+				"size":        pageSize,
+				"total_items": totalPremium,
+				"total_pages": totalPremiumPages,
+			},
 		},
 	}
 

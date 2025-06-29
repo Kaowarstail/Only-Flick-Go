@@ -13,6 +13,7 @@ func RegisterCreatorRoutes(router *mux.Router) {
 	// Routes publiques pour les créateurs
 	router.HandleFunc("/creators", handlers.GetCreators).Methods("GET", "OPTIONS")
 	router.HandleFunc("/creators/{id}", handlers.GetCreator).Methods("GET", "OPTIONS")
+	router.HandleFunc("/creators/{id}/contents", handlers.GetCreatorContents).Methods("GET", "OPTIONS")
 	router.HandleFunc("/creators/featured", handlers.GetFeaturedCreators).Methods("GET", "OPTIONS")
 	router.HandleFunc("/creators/search", handlers.SearchCreators).Methods("GET", "OPTIONS")
 	router.HandleFunc("/creators/{id}/subscription-plans", handleGetCreatorSubscriptionPlans).Methods("GET", "OPTIONS")
