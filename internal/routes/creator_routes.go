@@ -11,19 +11,19 @@ import (
 // RegisterCreatorRoutes enregistre toutes les routes de gestion des créateurs
 func RegisterCreatorRoutes(router *mux.Router) {
 	// Routes publiques pour les créateurs
-	router.HandleFunc("/creators", handlers.GetCreators).Methods("GET")
-	router.HandleFunc("/creators/{id}", handlers.GetCreator).Methods("GET")
-	router.HandleFunc("/creators/featured", handlers.GetFeaturedCreators).Methods("GET")
-	router.HandleFunc("/creators/search", handlers.SearchCreators).Methods("GET")
-	router.HandleFunc("/creators/{id}/subscription-plans", handleGetCreatorSubscriptionPlans).Methods("GET")
+	router.HandleFunc("/creators", handlers.GetCreators).Methods("GET", "OPTIONS")
+	router.HandleFunc("/creators/{id}", handlers.GetCreator).Methods("GET", "OPTIONS")
+	router.HandleFunc("/creators/featured", handlers.GetFeaturedCreators).Methods("GET", "OPTIONS")
+	router.HandleFunc("/creators/search", handlers.SearchCreators).Methods("GET", "OPTIONS")
+	router.HandleFunc("/creators/{id}/subscription-plans", handleGetCreatorSubscriptionPlans).Methods("GET", "OPTIONS")
 
 	// Routes protégées pour les créateurs
-	router.Handle("/creators", middleware.JWTAuth(http.HandlerFunc(handlers.BecomeCreator))).Methods("POST")
-	router.Handle("/creators/{id}", middleware.JWTAuth(http.HandlerFunc(handlers.UpdateCreator))).Methods("PUT")
-	router.Handle("/creators/{id}/banner", middleware.JWTAuth(handleUploadCreatorBanner)).Methods("PUT")
-	router.Handle("/creators/{id}/subscribers", middleware.JWTAuth(handleGetCreatorSubscribers)).Methods("GET")
-	router.Handle("/creators/{id}/stats", middleware.JWTAuth(handleGetCreatorStats)).Methods("GET")
-	router.Handle("/creators/{id}/earnings", middleware.JWTAuth(handleGetCreatorEarnings)).Methods("GET")
+	router.Handle("/creators/become", middleware.JWTAuth(http.HandlerFunc(handlers.BecomeCreator))).Methods("POST", "OPTIONS")
+	router.Handle("/creators/{id}", middleware.JWTAuth(http.HandlerFunc(handlers.UpdateCreator))).Methods("PUT", "OPTIONS")
+	router.Handle("/creators/{id}/banner", middleware.JWTAuth(handleUploadCreatorBanner)).Methods("PUT", "OPTIONS")
+	router.Handle("/creators/{id}/subscribers", middleware.JWTAuth(handleGetCreatorSubscribers)).Methods("GET", "OPTIONS")
+	router.Handle("/creators/{id}/stats", middleware.JWTAuth(handleGetCreatorStats)).Methods("GET", "OPTIONS")
+	router.Handle("/creators/{id}/earnings", middleware.JWTAuth(handleGetCreatorEarnings)).Methods("GET", "OPTIONS")
 }
 
 // Définitions temporaires des gestionnaires

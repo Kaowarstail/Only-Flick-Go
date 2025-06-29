@@ -14,8 +14,10 @@ import (
 
 // BecomeCreatorRequest représente les données de demande pour devenir créateur
 type BecomeCreatorRequest struct {
-	Biography  string   `json:"biography"`
-	Categories []string `json:"categories"`
+	Biography   string                 `json:"biography"`
+	Categories  []string               `json:"categories"`
+	WebsiteURL  string                 `json:"website_url"`
+	SocialLinks map[string]interface{} `json:"social_links"`
 }
 
 // GetCreators récupère tous les créateurs
@@ -212,7 +214,7 @@ func BecomeCreator(w http.ResponseWriter, r *http.Request) {
 
 	// Récupérer l'utilisateur
 	var user models.User
-	result := database.GetDB().First(&user, userID)
+	result := database.GetDB().Where("id = ?", userID).First(&user)
 	if result.Error != nil {
 		respondWithError(w, http.StatusNotFound, "Utilisateur non trouvé")
 		return
@@ -244,6 +246,27 @@ func BecomeCreator(w http.ResponseWriter, r *http.Request) {
 	if result.Error != nil {
 		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la mise à jour du statut de créateur")
 		return
+	}
+
+	// Créer le profil créateur avec les informations supplémentaires
+	socialLinksJSON := ""
+	if req.SocialLinks != nil && len(req.SocialLinks) > 0 {
+		socialLinksBytes, err := json.Marshal(req.SocialLinks)
+		if err == nil {
+			socialLinksJSON = string(socialLinksBytes)
+		}
+	}
+
+	creatorProfile := models.CreatorProfile{
+		UserID:      userID,
+		WebsiteURL:  req.WebsiteURL,
+		SocialLinks: socialLinksJSON,
+	}
+
+	result = database.GetDB().Create(&creatorProfile)
+	if result.Error != nil {
+		// Si la création du profil échoue, on continue quand même
+		// car l'utilisateur est maintenant un créateur
 	}
 
 	// TODO: Gérer les catégories du créateur (nécessite un modèle supplémentaire)
