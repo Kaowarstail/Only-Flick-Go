@@ -21,7 +21,7 @@ func RegisterCreatorRoutes(router *mux.Router) {
 	// Routes protégées pour les créateurs
 	router.Handle("/creators/become", middleware.JWTAuth(http.HandlerFunc(handlers.BecomeCreator))).Methods("POST", "OPTIONS")
 	router.Handle("/creators/{id}", middleware.JWTAuth(http.HandlerFunc(handlers.UpdateCreator))).Methods("PUT", "OPTIONS")
-	router.Handle("/creators/{id}/banner", middleware.JWTAuth(handleUploadCreatorBanner)).Methods("PUT", "OPTIONS")
+	router.Handle("/creators/{id}/banner", middleware.JWTAuth(http.HandlerFunc(handlers.UploadBannerImage))).Methods("PUT", "OPTIONS")
 	router.Handle("/creators/{id}/subscribers", middleware.JWTAuth(handleGetCreatorSubscribers)).Methods("GET", "OPTIONS")
 	router.Handle("/creators/{id}/stats", middleware.JWTAuth(handleGetCreatorStats)).Methods("GET", "OPTIONS")
 	router.Handle("/creators/{id}/earnings", middleware.JWTAuth(handleGetCreatorEarnings)).Methods("GET", "OPTIONS")
@@ -54,10 +54,6 @@ var (
 		w.Write([]byte("Endpoint non implémenté"))
 	})
 	handleUpdateCreator = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotImplemented)
-		w.Write([]byte("Endpoint non implémenté"))
-	})
-	handleUploadCreatorBanner = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotImplemented)
 		w.Write([]byte("Endpoint non implémenté"))
 	})

@@ -14,6 +14,13 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 )
 
+// healthHandler gère l'endpoint de santé
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status": "healthy", "service": "OnlyFlick API"}`))
+}
+
 func main() {
 	// Chargement de la configuration
 	_, err := config.Load()
@@ -34,6 +41,11 @@ func main() {
 
 	// Setup du routeur
 	router := mux.NewRouter()
+
+	// Endpoint de santé
+	router.HandleFunc("/health", healthHandler).Methods("GET")
+
+	// Enregistrer les autres routes
 	routes.RegisterRoutes(router)
 
 	// Démarrage du serveur

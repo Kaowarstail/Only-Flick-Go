@@ -23,65 +23,6 @@ type NotificationSettings struct {
 	ContentNotifications bool `json:"content_notifications"`
 }
 
-// UploadProfilePicture gère le téléchargement d'une photo de profil
-func UploadProfilePicture(w http.ResponseWriter, r *http.Request) {
-	// Extraire l'ID utilisateur depuis l'URL
-	vars := mux.Vars(r)
-	id := vars["id"]
-
-	// Vérifier si l'utilisateur connecté a le droit de modifier ce profil
-	userID, ok := middleware.GetUserIDFromContext(r.Context())
-	if !ok || id != userID {
-		respondWithError(w, http.StatusForbidden, "Vous n'êtes pas autorisé à modifier ce profil")
-		return
-	}
-
-	// Limite de taille du fichier à 5MB
-	r.ParseMultipartForm(5 << 20)
-
-	// Récupérer le fichier depuis la requête
-	file, handler, err := r.FormFile("profile_picture")
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Erreur lors de la récupération du fichier")
-		return
-	}
-	defer file.Close()
-
-	// Vérifier le type MIME (devrait être une image)
-	if handler.Header.Get("Content-Type") != "image/jpeg" &&
-		handler.Header.Get("Content-Type") != "image/png" &&
-		handler.Header.Get("Content-Type") != "image/gif" {
-		respondWithError(w, http.StatusBadRequest, "Le fichier doit être une image (JPEG, PNG ou GIF)")
-		return
-	}
-
-	// TODO: Implémenter le stockage réel du fichier (S3, système de fichiers, etc.)
-	// Pour l'instant, supposons que nous avons stocké le fichier et obtenu une URL
-
-	// URL fictive pour la démonstration
-	profilePictureURL := "/uploads/profiles/" + handler.Filename
-
-	// Mettre à jour l'URL de la photo de profil dans la base de données
-	var user models.User
-	result := database.GetDB().First(&user, id)
-	if result.Error != nil {
-		respondWithError(w, http.StatusNotFound, "Utilisateur non trouvé")
-		return
-	}
-
-	user.ProfilePicture = profilePictureURL
-	result = database.GetDB().Save(&user)
-	if result.Error != nil {
-		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la mise à jour de la photo de profil")
-		return
-	}
-
-	respondWithJSON(w, http.StatusOK, map[string]string{
-		"message": "Photo de profil mise à jour avec succès",
-		"url":     profilePictureURL,
-	})
-}
-
 // GetFollowing récupère la liste des utilisateurs suivis par un utilisateur
 func GetFollowing(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
@@ -163,7 +104,7 @@ func BlockUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Supprimer le suivi mutuel s'il existe
-	database.GetDB().Where("(follower_id = ? AND followed_id = ?) OR (follower_id = ? AND followed_id = ?)", 
+	database.GetDB().Where("(follower_id = ? AND followed_id = ?) OR (follower_id = ? AND followed_id = ?)",
 		userID, targetID, targetID, userID).Delete(&models.Follow{})
 
 	respondWithJSON(w, http.StatusOK, map[string]string{
@@ -337,7 +278,7 @@ func GetFeed(w http.ResponseWriter, r *http.Request) {
 		Order("created_at DESC").
 		Limit(pageSize).
 		Offset(offset)
-	
+
 	result := query.Find(&contents)
 	if result.Error != nil {
 		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la récupération du flux")
@@ -412,7 +353,7 @@ func FollowUser(w http.ResponseWriter, r *http.Request) {
 
 	// Vérifier si l'utilisateur n'est pas bloqué
 	var block models.Block
-	result = database.GetDB().Where("(blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)", 
+	result = database.GetDB().Where("(blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)",
 		userID, targetID, targetID, userID).First(&block)
 	if result.Error == nil {
 		respondWithError(w, http.StatusForbidden, "Impossible de suivre cet utilisateur")

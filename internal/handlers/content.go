@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/Kaowarstail/Only-Flick-Go/internal/database"
 	"github.com/Kaowarstail/Only-Flick-Go/internal/middleware"
+	"github.com/Kaowarstail/Only-Flick-Go/internal/services"
 	"github.com/Kaowarstail/Only-Flick-Go/internal/utils"
 	"github.com/Kaowarstail/Only-Flick-Go/models"
 )
@@ -29,6 +31,168 @@ type UpdateContentRequest struct {
 	Description *string `json:"description"`
 	IsPremium   *bool   `json:"is_premium"`
 	IsPublished *bool   `json:"is_published"`
+}
+
+// CreateContentWithMedia crée un nouveau contenu et upload le média en une seule requête
+func CreateContentWithMedia(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("📤 [CreateContentWithMedia] Début de la création de contenu avec média")
+
+	// Récupérer l'ID utilisateur depuis le contexte JWT
+	userID, ok := middleware.GetUserIDFromContext(r.Context())
+	if !ok {
+		respondWithError(w, http.StatusUnauthorized, "Utilisateur non authentifié")
+		return
+	}
+
+	// Vérifier que l'utilisateur est un créateur
+	var user models.User
+	result := database.GetDB().First(&user, "id = ? AND role = ?", userID, models.RoleCreator)
+	if result.Error != nil {
+		respondWithError(w, http.StatusForbidden, "Seuls les créateurs peuvent publier du contenu")
+		return
+	}
+
+	// Limite de taille de fichier (20MB pour les vidéos)
+	err := r.ParseMultipartForm(20 << 20)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Erreur lors du parsing de la requête multipart")
+		return
+	}
+
+	// Récupérer les champs du formulaire
+	title := r.FormValue("title")
+	description := r.FormValue("description")
+	contentType := r.FormValue("type") // "image" ou "video"
+	isPremiumStr := r.FormValue("is_premium")
+	isPublishedStr := r.FormValue("is_published")
+
+	// Validations
+	if title == "" {
+		respondWithError(w, http.StatusBadRequest, "Le titre est requis")
+		return
+	}
+	if contentType == "" {
+		contentType = "image" // Par défaut
+	}
+	if contentType != "image" && contentType != "video" {
+		respondWithError(w, http.StatusBadRequest, "Le type doit être 'image' ou 'video'")
+		return
+	}
+
+	// Conversion des booléens
+	isPremium := isPremiumStr == "true"
+	isPublished := isPublishedStr == "true"
+
+	// 1. Créer le contenu d'abord
+	content := models.Content{
+		CreatorID:   userID,
+		Title:       title,
+		Description: description,
+		Type:        contentType,
+		IsPremium:   isPremium,
+		IsPublished: isPublished,
+	}
+
+	result = database.GetDB().Create(&content)
+	if result.Error != nil {
+		fmt.Printf("❌ [CreateContentWithMedia] Erreur lors de la création du contenu: %v\n", result.Error)
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la création du contenu")
+		return
+	}
+
+	fmt.Printf("✅ [CreateContentWithMedia] Contenu créé avec ID: %s\n", content.ID)
+
+	// 2. Récupérer le fichier média
+	file, handler, err := r.FormFile("media")
+	if err != nil {
+		fmt.Printf("❌ [CreateContentWithMedia] Erreur lors de la récupération du fichier: %v\n", err)
+		respondWithError(w, http.StatusBadRequest, "Fichier média requis")
+		return
+	}
+	defer file.Close()
+
+	fmt.Printf("📁 [CreateContentWithMedia] Fichier reçu: %s, Taille: %d octets\n", handler.Filename, handler.Size)
+
+	// 3. Initialiser le service Cloudinary
+	cloudinaryService, err := services.NewCloudinaryService()
+	if err != nil {
+		fmt.Printf("❌ [CreateContentWithMedia] Erreur lors de l'initialisation du service Cloudinary: %v\n", err)
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de l'initialisation du service Cloudinary")
+		return
+	}
+
+	// 4. Valider le type de fichier
+	contentTypeHeader := handler.Header.Get("Content-Type")
+	if !cloudinaryService.ValidateFileType(contentTypeHeader, contentType, handler.Filename) {
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Type de fichier non supporté pour le type '%s'", contentType))
+		return
+	}
+
+	// 5. Upload vers Cloudinary
+	var uploadResult *services.UploadResult
+	contentIDStr := strconv.Itoa(int(content.ID))
+	if contentType == "image" {
+		uploadResult, err = cloudinaryService.UploadImage(file, handler.Filename, contentIDStr)
+	} else if contentType == "video" {
+		uploadResult, err = cloudinaryService.UploadVideo(file, handler.Filename, contentIDStr)
+	}
+
+	if err != nil {
+		fmt.Printf("❌ [CreateContentWithMedia] Erreur lors de l'upload: %v\n", err)
+		// Supprimer le contenu créé en cas d'échec d'upload
+		database.GetDB().Delete(&content)
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de l'upload du fichier: "+err.Error())
+		return
+	}
+
+	// 6. Générer une miniature automatiquement
+	thumbnailURL, err := cloudinaryService.GenerateThumbnail(uploadResult.PublicID, uploadResult.ResourceType)
+	if err != nil {
+		fmt.Printf("⚠️ [CreateContentWithMedia] Erreur lors de la génération de la miniature: %v\n", err)
+		// Continuer même si la miniature échoue
+		thumbnailURL = uploadResult.SecureURL
+	}
+
+	// 7. Mettre à jour le contenu avec les URLs
+	content.MediaURL = uploadResult.SecureURL
+	content.ThumbnailURL = thumbnailURL
+	content.PublicID = uploadResult.PublicID
+
+	result = database.GetDB().Save(&content)
+	if result.Error != nil {
+		fmt.Printf("❌ [CreateContentWithMedia] Erreur lors de la mise à jour du contenu: %v\n", result.Error)
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la sauvegarde des URLs")
+		return
+	}
+
+	fmt.Printf("✅ [CreateContentWithMedia] Contenu créé et uploadé avec succès. URL: %s\n", content.MediaURL)
+
+	// 8. Construire la réponse
+	response := map[string]interface{}{
+		"message": "Contenu créé et média uploadé avec succès",
+		"content": map[string]interface{}{
+			"id":            content.ID,
+			"title":         content.Title,
+			"description":   content.Description,
+			"type":          content.Type,
+			"media_url":     content.MediaURL,
+			"thumbnail_url": content.ThumbnailURL,
+			"public_id":     content.PublicID,
+			"is_premium":    content.IsPremium,
+			"is_published":  content.IsPublished,
+			"created_at":    content.CreatedAt,
+		},
+		"upload_info": map[string]interface{}{
+			"format":        uploadResult.Format,
+			"resource_type": uploadResult.ResourceType,
+			"width":         uploadResult.Width,
+			"height":        uploadResult.Height,
+			"bytes":         uploadResult.Bytes,
+		},
+	}
+
+	fmt.Println("🎉 [CreateContentWithMedia] Processus terminé avec succès")
+	respondWithJSON(w, http.StatusCreated, response)
 }
 
 // GetContents récupère tous les contenus publics avec pagination et filtres
@@ -136,7 +300,7 @@ func CreateContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Vérifier que l'utilisateur est un créateur
+	// Vérifier que l'utilisateur est un créateur, subscriber ou admin
 	var user models.User
 	result := database.GetDB().First(&user, "id = ?", userID)
 	if result.Error != nil {
@@ -144,8 +308,8 @@ func CreateContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if user.Role != models.RoleCreator && user.Role != models.RoleAdmin {
-		respondWithError(w, http.StatusForbidden, "Seuls les créateurs peuvent publier du contenu")
+	if user.Role != models.RoleCreator && user.Role != models.RoleAdmin && user.Role != models.RoleSubscriber {
+		respondWithError(w, http.StatusForbidden, "Seuls les créateurs et abonnés peuvent publier du contenu")
 		return
 	}
 
@@ -156,6 +320,12 @@ func CreateContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer r.Body.Close()
+
+	// Les subscribers peuvent seulement publier du contenu gratuit
+	if user.Role == models.RoleSubscriber && createRequest.IsPremium {
+		respondWithError(w, http.StatusForbidden, "Les abonnés ne peuvent publier que du contenu gratuit")
+		return
+	}
 
 	// Validation des données
 	createRequest.Title = utils.SanitizeInput(createRequest.Title)
@@ -330,6 +500,26 @@ func DeleteContent(w http.ResponseWriter, r *http.Request) {
 	if result.Error != nil {
 		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la suppression du contenu")
 		return
+	}
+
+	// Supprimer le fichier de Cloudinary si un PublicID existe
+	if content.PublicID != "" {
+		cloudinaryService, err := services.NewCloudinaryService()
+		if err == nil {
+			// Déterminer le type de ressource basé sur le type de contenu
+			resourceType := "image"
+			if content.Type == "video" {
+				resourceType = "video"
+			}
+
+			err = cloudinaryService.DeleteFile(content.PublicID, resourceType)
+			if err != nil {
+				fmt.Printf("⚠️ [DeleteContent] Erreur lors de la suppression du fichier Cloudinary: %v\n", err)
+				// Ne pas faire échouer la suppression du contenu si la suppression Cloudinary échoue
+			} else {
+				fmt.Printf("✅ [DeleteContent] Fichier Cloudinary supprimé: %s\n", content.PublicID)
+			}
+		}
 	}
 
 	respondWithJSON(w, http.StatusOK, map[string]string{
@@ -554,80 +744,138 @@ func GetTrendingContents(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, response)
 }
 
-// UploadContentMedia gère l'upload de fichiers média pour un contenu
+// UploadContentMedia uploade un média pour un contenu existant
 func UploadContentMedia(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("📤 [UploadContentMedia] Début de l'upload de média")
+
+	// Récupérer l'ID du contenu depuis l'URL
 	vars := mux.Vars(r)
-	id := vars["id"]
+	contentID := vars["id"]
+	if contentID == "" {
+		respondWithError(w, http.StatusBadRequest, "ID du contenu requis")
+		return
+	}
 
-	// Récupérer l'ID utilisateur du contexte
-	userID, ok := r.Context().Value(middleware.UserIDKey).(string)
+	// Récupérer l'ID utilisateur depuis le contexte JWT
+	userID, ok := middleware.GetUserIDFromContext(r.Context())
 	if !ok {
-		respondWithError(w, http.StatusInternalServerError, "Impossible d'extraire l'ID utilisateur")
+		respondWithError(w, http.StatusUnauthorized, "Utilisateur non authentifié")
 		return
 	}
 
-	// Récupérer le contenu
+	// Vérifier que le contenu existe et appartient à l'utilisateur
 	var content models.Content
-	result := database.GetDB().First(&content, "id = ?", id)
+	result := database.GetDB().First(&content, "id = ? AND creator_id = ?", contentID, userID)
 	if result.Error != nil {
-		respondWithError(w, http.StatusNotFound, "Contenu non trouvé")
+		respondWithError(w, http.StatusNotFound, "Contenu non trouvé ou accès refusé")
 		return
 	}
 
-	// Vérifier les permissions
-	if content.CreatorID != userID {
-		respondWithError(w, http.StatusForbidden, "Vous n'êtes pas autorisé à modifier ce contenu")
-		return
-	}
-
-	// Limite de taille de fichier (50MB)
-	if err := r.ParseMultipartForm(50 << 20); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Erreur lors de l'analyse du formulaire multipart")
-		return
-	}
+	// Limite de taille de fichier (20MB)
+	r.ParseMultipartForm(20 << 20)
 
 	// Récupérer le fichier depuis la requête
 	file, handler, err := r.FormFile("media")
 	if err != nil {
+		fmt.Printf("❌ [UploadContentMedia] Erreur lors de la récupération du fichier: %v\n", err)
 		respondWithError(w, http.StatusBadRequest, "Erreur lors de la récupération du fichier")
 		return
 	}
 	defer file.Close()
 
-	// Vérifier le type MIME selon le type de contenu
-	contentType := handler.Header.Get("Content-Type")
-	switch content.Type {
-	case "image":
-		if !strings.HasPrefix(contentType, "image/") {
-			respondWithError(w, http.StatusBadRequest, "Le fichier doit être une image")
-			return
-		}
-	case "video":
-		if !strings.HasPrefix(contentType, "video/") {
-			respondWithError(w, http.StatusBadRequest, "Le fichier doit être une vidéo")
-			return
-		}
-	default:
-		respondWithError(w, http.StatusBadRequest, "Type de contenu ne supportant pas l'upload de média")
+	fmt.Printf("📁 [UploadContentMedia] Fichier reçu: %s, Taille: %d octets\n", handler.Filename, handler.Size)
+
+	// Initialiser le service Cloudinary
+	fmt.Println("🔧 [UploadContentMedia] Initialisation du service Cloudinary")
+	cloudinaryService, err := services.NewCloudinaryService()
+	if err != nil {
+		fmt.Printf("❌ [UploadContentMedia] Erreur lors de l'initialisation du service Cloudinary: %v\n", err)
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de l'initialisation du service Cloudinary")
 		return
 	}
 
-	// TODO: Implémenter le stockage réel du fichier (S3, système de fichiers, etc.)
-	// Pour l'instant, on simule avec une URL fictive
-	mediaURL := "/uploads/content/" + handler.Filename
+	// Valider le type de fichier
+	contentTypeHeader := handler.Header.Get("Content-Type")
+	if !cloudinaryService.ValidateFileType(contentTypeHeader, content.Type, handler.Filename) {
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Type de fichier non supporté pour le type '%s'", content.Type))
+		return
+	}
 
-	// Mettre à jour l'URL du média dans la base de données
-	content.MediaURL = mediaURL
+	// Supprimer l'ancien média s'il existe
+	if content.PublicID != "" {
+		fmt.Printf("🗑️ [UploadContentMedia] Suppression de l'ancien média\n")
+		err = cloudinaryService.DeleteFile(content.PublicID, content.Type)
+		if err != nil {
+			fmt.Printf("⚠️ [UploadContentMedia] Erreur lors de la suppression de l'ancien média: %v\n", err)
+		}
+	}
+
+	// Upload vers Cloudinary
+	fmt.Println("🚀 [UploadContentMedia] Upload vers Cloudinary")
+	var uploadResult *services.UploadResult
+	contentIDStr := strconv.Itoa(int(content.ID))
+	if content.Type == "image" {
+		uploadResult, err = cloudinaryService.UploadImage(file, handler.Filename, contentIDStr)
+	} else if content.Type == "video" {
+		uploadResult, err = cloudinaryService.UploadVideo(file, handler.Filename, contentIDStr)
+	} else {
+		respondWithError(w, http.StatusBadRequest, "Type de contenu non supporté")
+		return
+	}
+
+	if err != nil {
+		fmt.Printf("❌ [UploadContentMedia] Erreur lors de l'upload: %v\n", err)
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de l'upload: "+err.Error())
+		return
+	}
+
+	// Générer une miniature
+	thumbnailURL, err := cloudinaryService.GenerateThumbnail(uploadResult.PublicID, uploadResult.ResourceType)
+	if err != nil {
+		fmt.Printf("⚠️ [UploadContentMedia] Erreur lors de la génération de la miniature: %v\n", err)
+		thumbnailURL = uploadResult.SecureURL
+	}
+
+	// Mettre à jour le contenu avec les nouvelles URLs
+	fmt.Println("💾 [UploadContentMedia] Mise à jour du contenu en base de données")
+	content.MediaURL = uploadResult.SecureURL
+	content.ThumbnailURL = thumbnailURL
+	content.PublicID = uploadResult.PublicID
+
 	result = database.GetDB().Save(&content)
 	if result.Error != nil {
+		fmt.Printf("❌ [UploadContentMedia] Erreur lors de la mise à jour du contenu: %s\n", result.Error.Error())
+		// Optionnel: supprimer l'image de Cloudinary en cas d'erreur
+		cloudinaryService.DeleteFile(uploadResult.PublicID, "image")
+		database.GetDB().Delete(&content)
 		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la mise à jour du contenu")
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, map[string]string{
-		"message":   "Fichier média uploadé avec succès",
-		"media_url": mediaURL,
-	})
+	fmt.Printf("✅ [UploadContentMedia] Média uploadé avec succès. URL: %s\n", content.MediaURL)
+
+	response := map[string]interface{}{
+		"message":       "Média uploadé avec succès",
+		"media_url":     uploadResult.SecureURL,
+		"thumbnail_url": thumbnailURL,
+		"public_id":     uploadResult.PublicID,
+		"content": map[string]interface{}{
+			"id":            content.ID,
+			"title":         content.Title,
+			"media_url":     content.MediaURL,
+			"thumbnail_url": content.ThumbnailURL,
+		},
+		"file_info": map[string]interface{}{
+			"format":        uploadResult.Format,
+			"resource_type": uploadResult.ResourceType,
+			"width":         uploadResult.Width,
+			"height":        uploadResult.Height,
+			"bytes":         uploadResult.Bytes,
+		},
+	}
+
+	fmt.Println("🎉 [UploadContentMedia] Upload terminé avec succès")
+	respondWithJSON(w, http.StatusOK, response)
 }
 
 // UploadContentThumbnail gère l'upload de la miniature d'un contenu
@@ -674,19 +922,349 @@ func UploadContentThumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Implémenter le stockage réel du fichier
-	thumbnailURL := "/uploads/thumbnails/" + handler.Filename
+	// Initialiser le service Cloudinary
+	cloudinaryService, err := services.NewCloudinaryService()
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de l'initialisation du service Cloudinary")
+		return
+	}
 
-	// Mettre à jour l'URL de la miniature
+	// Uploader la miniature vers Cloudinary
+	uploadResult, err := cloudinaryService.UploadImage(file, handler.Filename, fmt.Sprintf("%d", content.ID))
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de l'upload: "+err.Error())
+		return
+	}
+
+	thumbnailURL := uploadResult.SecureURL
+
+	// Mettre à jour l'URL de la miniature et le public ID
 	content.ThumbnailURL = thumbnailURL
+	content.PublicID = uploadResult.PublicID
 	result = database.GetDB().Save(&content)
 	if result.Error != nil {
 		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la mise à jour du contenu")
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, map[string]string{
+	respondWithJSON(w, http.StatusOK, map[string]interface{}{
 		"message":       "Miniature uploadée avec succès",
 		"thumbnail_url": thumbnailURL,
+		"public_id":     uploadResult.PublicID,
+		"file_info": map[string]interface{}{
+			"format":        uploadResult.Format,
+			"resource_type": uploadResult.ResourceType,
+			"width":         uploadResult.Width,
+			"height":        uploadResult.Height,
+			"bytes":         uploadResult.Bytes,
+		},
 	})
+}
+
+// GetOptimizedMediaURL génère une URL optimisée pour un contenu
+func GetOptimizedMediaURL(w http.ResponseWriter, r *http.Request) {
+	// Récupérer l'ID du contenu depuis l'URL
+	vars := mux.Vars(r)
+	contentIDStr, exists := vars["id"]
+	if !exists {
+		respondWithError(w, http.StatusBadRequest, "ID du contenu manquant")
+		return
+	}
+
+	contentID, err := strconv.Atoi(contentIDStr)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "ID du contenu invalide")
+		return
+	}
+
+	// Récupérer les paramètres de transformation depuis la query string
+	width := r.URL.Query().Get("w")
+	height := r.URL.Query().Get("h")
+	quality := r.URL.Query().Get("q")
+	format := r.URL.Query().Get("f")
+
+	// Récupérer le contenu
+	var content models.Content
+	result := database.GetDB().First(&content, "id = ?", contentID)
+	if result.Error != nil {
+		respondWithError(w, http.StatusNotFound, "Contenu non trouvé")
+		return
+	}
+
+	// Vérifier si le contenu a un PublicID Cloudinary
+	if content.PublicID == "" {
+		// Retourner l'URL standard si pas de PublicID
+		respondWithJSON(w, http.StatusOK, map[string]string{
+			"media_url":     content.MediaURL,
+			"thumbnail_url": content.ThumbnailURL,
+		})
+		return
+	}
+
+	// Initialiser le service Cloudinary
+	cloudinaryService, err := services.NewCloudinaryService()
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de l'initialisation du service Cloudinary")
+		return
+	}
+
+	// Construire les transformations
+	var transformations []string
+
+	if width != "" && height != "" {
+		transformations = append(transformations, fmt.Sprintf("w_%s,h_%s,c_fill", width, height))
+	}
+
+	if quality != "" {
+		transformations = append(transformations, fmt.Sprintf("q_%s", quality))
+	} else {
+		transformations = append(transformations, "q_auto")
+	}
+
+	if format != "" {
+		transformations = append(transformations, fmt.Sprintf("f_%s", format))
+	} else {
+		transformations = append(transformations, "f_auto")
+	}
+
+	// Générer les URLs optimisées
+	var optimizedURL, thumbnailURL string
+
+	if content.Type == "video" {
+		optimizedURL, err = cloudinaryService.GetVideoURL(content.PublicID, transformations...)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Erreur lors de la génération de l'URL vidéo")
+			return
+		}
+
+		// Générer une miniature pour la vidéo
+		thumbnailURL, err = cloudinaryService.GetThumbnailURL(content.PublicID, "video", 300, 300)
+		if err != nil {
+			thumbnailURL = content.ThumbnailURL // Fallback
+		}
+	} else {
+		optimizedURL, err = cloudinaryService.GetImageURL(content.PublicID, transformations...)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Erreur lors de la génération de l'URL image")
+			return
+		}
+
+		// Générer une miniature pour l'image
+		thumbnailURL, err = cloudinaryService.GetThumbnailURL(content.PublicID, "image", 300, 300)
+		if err != nil {
+			thumbnailURL = content.ThumbnailURL // Fallback
+		}
+	}
+
+	respondWithJSON(w, http.StatusOK, map[string]interface{}{
+		"media_url":       optimizedURL,
+		"thumbnail_url":   thumbnailURL,
+		"public_id":       content.PublicID,
+		"transformations": transformations,
+	})
+}
+
+// MigrateContentToCloudinary migre un contenu existant vers Cloudinary
+func MigrateContentToCloudinary(w http.ResponseWriter, r *http.Request) {
+	// Récupérer l'ID du contenu depuis l'URL
+	vars := mux.Vars(r)
+	contentIDStr, exists := vars["id"]
+	if !exists {
+		respondWithError(w, http.StatusBadRequest, "ID du contenu manquant")
+		return
+	}
+
+	contentID, err := strconv.Atoi(contentIDStr)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "ID du contenu invalide")
+		return
+	}
+
+	// Récupérer l'ID utilisateur du contexte
+	userID, ok := r.Context().Value(middleware.UserIDKey).(string)
+	if !ok {
+		respondWithError(w, http.StatusUnauthorized, "Utilisateur non authentifié")
+		return
+	}
+
+	// Récupérer le contenu
+	var content models.Content
+	result := database.GetDB().First(&content, "id = ? AND creator_id = ?", contentID, userID)
+	if result.Error != nil {
+		respondWithError(w, http.StatusNotFound, "Contenu non trouvé ou non autorisé")
+		return
+	}
+
+	// Vérifier si le contenu a déjà un PublicID Cloudinary
+	if content.PublicID != "" {
+		respondWithError(w, http.StatusBadRequest, "Le contenu est déjà migré vers Cloudinary")
+		return
+	}
+
+	// Vérifier si le contenu a une URL média
+	if content.MediaURL == "" {
+		respondWithError(w, http.StatusBadRequest, "Le contenu n'a pas d'URL média à migrer")
+		return
+	}
+
+	// TODO: Implémenter la migration depuis une URL existante
+	// Cela nécessiterait de télécharger le fichier depuis l'URL existante
+	// et de l'uploader vers Cloudinary
+
+	respondWithJSON(w, http.StatusOK, map[string]interface{}{
+		"message": "Migration non implémentée",
+		"content": content,
+	})
+}
+
+// UploadContentImage gère l'upload d'une image pour un contenu et la création du contenu
+func UploadContentImage(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("📤 [UploadContentImage] Début de l'upload d'image pour contenu")
+
+	// Récupérer l'ID utilisateur du contexte (créateur)
+	userID, ok := r.Context().Value(middleware.UserIDKey).(string)
+	if !ok {
+		fmt.Println("❌ [UploadContentImage] Impossible d'extraire l'ID utilisateur")
+		respondWithError(w, http.StatusInternalServerError, "Impossible d'extraire l'ID utilisateur")
+		return
+	}
+
+	// Vérifier que l'utilisateur est un créateur
+	var user models.User
+	result := database.GetDB().First(&user, "id = ? AND role = ?", userID, models.RoleCreator)
+	if result.Error != nil {
+		fmt.Printf("❌ [UploadContentImage] Créateur non trouvé: %s\n", userID)
+		respondWithError(w, http.StatusForbidden, "Seuls les créateurs peuvent publier du contenu")
+		return
+	}
+
+	// Limite de taille de fichier (10MB pour les images)
+	r.ParseMultipartForm(10 << 20)
+
+	// Récupérer les métadonnées du contenu depuis le formulaire
+	title := r.FormValue("title")
+	description := r.FormValue("description")
+	isPremiumStr := r.FormValue("is_premium")
+	isPublishedStr := r.FormValue("is_published")
+
+	// Validation des champs obligatoires
+	if title == "" {
+		respondWithError(w, http.StatusBadRequest, "Le titre est obligatoire")
+		return
+	}
+
+	// Conversion des booléens
+	isPremium, _ := strconv.ParseBool(isPremiumStr)
+	isPublished, _ := strconv.ParseBool(isPublishedStr)
+
+	// Récupérer le fichier image depuis la requête
+	file, handler, err := r.FormFile("image")
+	if err != nil {
+		fmt.Printf("❌ [UploadContentImage] Erreur lors de la récupération du fichier: %v\n", err)
+		respondWithError(w, http.StatusBadRequest, "Erreur lors de la récupération du fichier image")
+		return
+	}
+	defer file.Close()
+
+	fmt.Printf("📁 [UploadContentImage] Fichier reçu: %s, Taille: %d octets\n", handler.Filename, handler.Size)
+
+	// Vérifier que c'est bien une image
+	contentType := handler.Header.Get("Content-Type")
+	if !strings.HasPrefix(contentType, "image/") {
+		fmt.Printf("❌ [UploadContentImage] Type de fichier non supporté: %s\n", contentType)
+		respondWithError(w, http.StatusBadRequest, "Le fichier doit être une image")
+		return
+	}
+
+	// Créer d'abord l'entité Content en base pour avoir un ID
+	content := models.Content{
+		CreatorID:   userID,
+		Title:       title,
+		Description: description,
+		Type:        "image",
+		IsPremium:   isPremium,
+		IsPublished: isPublished,
+	}
+
+	// Sauvegarder le contenu (sans l'URL pour l'instant)
+	result = database.GetDB().Create(&content)
+	if result.Error != nil {
+		fmt.Printf("❌ [UploadContentImage] Erreur lors de la création du contenu: %v\n", result.Error)
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la création du contenu")
+		return
+	}
+
+	fmt.Printf("✅ [UploadContentImage] Contenu créé avec ID: %s\n", content.ID)
+
+	// Initialiser le service Cloudinary
+	fmt.Println("🔧 [UploadContentImage] Initialisation du service Cloudinary")
+	cloudinaryService, err := services.NewCloudinaryService()
+	if err != nil {
+		fmt.Printf("❌ [UploadContentImage] Erreur lors de l'initialisation du service Cloudinary: %v\n", err)
+		// Supprimer le contenu créé en cas d'erreur
+		database.GetDB().Delete(&content)
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de l'initialisation du service Cloudinary")
+		return
+	}
+
+	// Uploader l'image vers Cloudinary
+	fmt.Println("🚀 [UploadContentImage] Upload vers Cloudinary")
+	contentIDStr := fmt.Sprintf("%d", content.ID)
+	uploadResult, err := cloudinaryService.UploadImage(file, handler.Filename, contentIDStr)
+	if err != nil {
+		fmt.Printf("❌ [UploadContentImage] Erreur lors de l'upload: %v\n", err)
+		// Supprimer le contenu créé en cas d'erreur
+		database.GetDB().Delete(&content)
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de l'upload vers Cloudinary: "+err.Error())
+		return
+	}
+
+	// Mettre à jour le contenu avec l'URL de l'image
+	fmt.Println("💾 [UploadContentImage] Mise à jour du contenu avec l'URL Cloudinary")
+	content.MediaURL = uploadResult.SecureURL
+	content.ThumbnailURL = uploadResult.SecureURL // Pour les images, on peut utiliser la même URL
+	content.PublicID = uploadResult.PublicID      // Stocker le PublicID pour la suppression future
+
+	// Sauvegarder les modifications
+	result = database.GetDB().Save(&content)
+	if result.Error != nil {
+		fmt.Printf("❌ [UploadContentImage] Erreur lors de la mise à jour du contenu: %s\n", result.Error.Error())
+		// Optionnel: supprimer l'image de Cloudinary en cas d'erreur
+		cloudinaryService.DeleteFile(uploadResult.PublicID, "image")
+		database.GetDB().Delete(&content)
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la mise à jour du contenu")
+		return
+	}
+
+	fmt.Printf("✅ [UploadContentImage] Contenu créé avec succès. URL: %s\n", content.MediaURL)
+
+	// Réponse complète avec toutes les informations
+	response := map[string]interface{}{
+		"message":    "Contenu créé et image uploadée avec succès",
+		"content_id": content.ID,
+		"media_url":  uploadResult.SecureURL,
+		"public_id":  uploadResult.PublicID,
+		"content": map[string]interface{}{
+			"id":            content.ID,
+			"title":         content.Title,
+			"description":   content.Description,
+			"type":          content.Type,
+			"media_url":     content.MediaURL,
+			"thumbnail_url": content.ThumbnailURL,
+			"is_premium":    content.IsPremium,
+			"is_published":  content.IsPublished,
+			"creator_id":    content.CreatorID,
+			"created_at":    content.CreatedAt,
+		},
+		"cloudinary_info": map[string]interface{}{
+			"format":        uploadResult.Format,
+			"resource_type": uploadResult.ResourceType,
+			"width":         uploadResult.Width,
+			"height":        uploadResult.Height,
+			"bytes":         uploadResult.Bytes,
+		},
+	}
+
+	fmt.Println("🎉 [UploadContentImage] Upload terminé avec succès")
+	respondWithJSON(w, http.StatusCreated, response)
 }
