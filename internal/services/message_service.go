@@ -14,10 +14,10 @@ type MessageService struct {
 	conversationService *ConversationService
 }
 
-func NewMessageService(db *sql.DB, conversationService *ConversationService) *MessageService {
+func NewMessageService(db *sql.DB) *MessageService {
 	return &MessageService{
 		db:                  db,
-		conversationService: conversationService,
+		conversationService: NewConversationService(db),
 	}
 }
 
@@ -354,6 +354,69 @@ func (s *MessageService) DeleteMessage(messageID, userID string) error {
 	}
 
 	return nil
+}
+
+// GetConversationByID récupère une conversation par son ID
+func (s *MessageService) GetConversationByID(conversationID string) (*models.Conversation, error) {
+	return s.conversationService.GetConversationByID(conversationID)
+}
+
+// GetUserByID récupère un utilisateur par son ID
+func (s *MessageService) GetUserByID(userID string) (*models.User, error) {
+	query := `
+		SELECT id, username, email, created_at, updated_at
+		FROM users 
+		WHERE id = $1
+	`
+	
+	var user models.User
+	err := s.db.QueryRow(query, userID).Scan(
+		&user.ID,
+		&user.Username,
+		&user.Email,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+	
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+	
+	return &user, nil
+}
+
+// GetLatestTransactionForMessage récupère la dernière transaction pour un message
+func (s *MessageService) GetLatestTransactionForMessage(messageID string) (*models.PaidMessageTransaction, error) {
+	query := `
+		SELECT id, message_id, buyer_id, seller_id, amount, transaction_fee, 
+			   net_amount, status, created_at
+		FROM paid_message_transactions
+		WHERE message_id = $1
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+	
+	var transaction models.PaidMessageTransaction
+	err := s.db.QueryRow(query, messageID).Scan(
+		&transaction.ID,
+		&transaction.MessageID,
+		&transaction.BuyerID,
+		&transaction.SellerID,
+		&transaction.Amount,
+		&transaction.TransactionFee,
+		&transaction.NetAmount,
+		&transaction.Status,
+		&transaction.CreatedAt,
+	)
+	
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // Pas de transaction trouvée
+		}
+		return nil, fmt.Errorf("failed to get transaction: %w", err)
+	}
+	
+	return &transaction, nil
 }
 
 // Helper functions

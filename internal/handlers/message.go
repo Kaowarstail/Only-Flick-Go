@@ -10,18 +10,21 @@ import (
 	"github.com/Kaowarstail/Only-Flick-Go/internal/services"
 	"github.com/Kaowarstail/Only-Flick-Go/internal/utils"
 	"github.com/Kaowarstail/Only-Flick-Go/models"
+	websocketPkg "github.com/Kaowarstail/Only-Flick-Go/internal/websocket"
 	"github.com/gorilla/mux"
 )
 
 // MessageHandler gère les requêtes liées aux messages
 type MessageHandler struct {
 	messageService *services.MessageService
+	hub           *websocketPkg.Hub
 }
 
 // NewMessageHandler crée un nouveau handler pour les messages
-func NewMessageHandler() *MessageHandler {
+func NewMessageHandler(hub *websocketPkg.Hub) *MessageHandler {
 	return &MessageHandler{
 		messageService: services.NewMessageService(database.GetDB()),
+		hub:           hub,
 	}
 }
 
@@ -98,6 +101,25 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Récupérer les informations complètes pour le WebSocket
+	conversation, err := h.messageService.GetConversationByID(request.ConversationID)
+	if err != nil {
+		// Log l'erreur mais ne pas faire échouer la requête
+		// Le message a été envoyé avec succès
+		// TODO: Log properly
+	}
+
+	sender, err := h.messageService.GetUserByID(userID)
+	if err != nil {
+		// Log l'erreur mais ne pas faire échouer la requête
+		// TODO: Log properly
+	}
+
+	// Broadcaster le message via WebSocket si les informations sont disponibles
+	if h.hub != nil && conversation != nil && sender != nil {
+		h.hub.BroadcastMessageSent(message, conversation, sender)
+	}
+
 	response := models.APIResponse{
 		Success: true,
 		Data:    message,
@@ -122,6 +144,18 @@ func (h *MessageHandler) UnlockPaidMessage(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Erreur lors du déblocage du message")
 		return
+	}
+
+	// Récupérer les informations de transaction pour le WebSocket
+	transaction, err := h.messageService.GetLatestTransactionForMessage(messageID)
+	if err != nil {
+		// Log l'erreur mais ne pas faire échouer la requête
+		// TODO: Log properly
+	}
+
+	// Broadcaster le déblocage via WebSocket
+	if h.hub != nil {
+		h.hub.BroadcastPaidMessageUnlocked(message, userID, transaction)
 	}
 
 	response := models.APIResponse{

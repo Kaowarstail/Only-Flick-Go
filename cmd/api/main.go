@@ -9,8 +9,10 @@ import (
 	"github.com/Kaowarstail/Only-Flick-Go/config"
 	"github.com/Kaowarstail/Only-Flick-Go/internal/database"
 	"github.com/Kaowarstail/Only-Flick-Go/internal/routes"
+	"github.com/Kaowarstail/Only-Flick-Go/internal/services"
+	"github.com/Kaowarstail/Only-Flick-Go/internal/websocket"
 	"github.com/Kaowarstail/Only-Flick-Go/seed"
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 	_ "github.com/joho/godotenv/autoload"
 )
 
@@ -32,9 +34,23 @@ func main() {
 		seed.Run()
 	}
 
+	// Initialiser les services
+	db := database.GetDB()
+	conversationService := services.NewConversationService(db)
+	messageService := services.NewMessageService(db)
+
+	// Créer et démarrer le hub WebSocket
+	hub := websocket.NewHub(messageService, conversationService, db)
+	go hub.Run()
+
 	// Setup du routeur
-	router := mux.NewRouter()
-	routes.RegisterRoutes(router)
+	router := gin.Default()
+	
+	// Enregistrer les routes principales et WebSocket
+	routes.RegisterGinRoutes(router, hub)
+	
+	// Enregistrer les routes WebSocket
+	routes.RegisterWebSocketRoutes(router, hub)
 
 	// Démarrage du serveur
 	port := config.Get().Server.Port
