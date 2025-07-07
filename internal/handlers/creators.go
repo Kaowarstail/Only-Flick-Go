@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/Kaowarstail/Only-Flick-Go/internal/database"
 	"github.com/Kaowarstail/Only-Flick-Go/internal/middleware"
+	"github.com/Kaowarstail/Only-Flick-Go/internal/utils"
 	"github.com/Kaowarstail/Only-Flick-Go/models"
 )
 
@@ -336,4 +338,252 @@ func UpdateCreator(w http.ResponseWriter, r *http.Request) {
 	// TODO: Gérer les catégories du créateur (nécessite un modèle supplémentaire)
 
 	respondWithJSON(w, http.StatusOK, user.ToResponse())
+}
+
+// getUserIDFromContext récupère l'ID utilisateur depuis le contexte
+func getUserIDFromContext(ctx context.Context) string {
+	userID, err := utils.GetUserIDFromContext(ctx)
+	if err != nil {
+		return ""
+	}
+	return userID
+}
+
+// UpdateCreatorProfile met à jour le profil d'un créateur
+func UpdateCreatorProfile(w http.ResponseWriter, r *http.Request) {
+	userID := getUserIDFromContext(r.Context())
+	if userID == "" {
+		respondWithError(w, http.StatusUnauthorized, "Utilisateur non authentifié")
+		return
+	}
+
+	var updateData struct {
+		Biography           *string                `json:"biography"`
+		Categories          []string               `json:"categories"`
+		WebsiteURL          *string                `json:"website_url"`
+		SocialLinks         map[string]interface{} `json:"social_links"`
+		SubscriptionPrice   *float64               `json:"subscription_price"`
+		MessagePrice        *float64               `json:"message_price"`
+		CustomTipAmounts    []float64              `json:"custom_tip_amounts"`
+		AcceptCustomTips    *bool                  `json:"accept_custom_tips"`
+		AcceptMessaging     *bool                  `json:"accept_messaging"`
+		AcceptSubscriptions *bool                  `json:"accept_subscriptions"`
+		ProfilePicture      *string                `json:"profile_picture"`
+		CoverPicture        *string                `json:"cover_picture"`
+		Location            *string                `json:"location"`
+		IsVerified          *bool                  `json:"is_verified"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(&updateData); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Données invalides")
+		return
+	}
+	defer r.Body.Close()
+
+	// Récupérer l'utilisateur créateur
+	var user models.User
+	if err := database.GetDB().First(&user, "id = ? AND role = ?", userID, models.RoleCreator).Error; err != nil {
+		respondWithError(w, http.StatusNotFound, "Créateur non trouvé")
+		return
+	}
+
+	// Mise à jour des champs de base
+	if updateData.Biography != nil {
+		user.Biography = *updateData.Biography
+	}
+	if updateData.WebsiteURL != nil {
+		user.Website = updateData.WebsiteURL
+	}
+	if updateData.SubscriptionPrice != nil {
+		user.SubscriptionPrice = updateData.SubscriptionPrice
+	}
+	if updateData.MessagePrice != nil {
+		user.MessagePrice = updateData.MessagePrice
+	}
+	if updateData.CustomTipAmounts != nil {
+		user.CustomTipAmounts = updateData.CustomTipAmounts
+	}
+	if updateData.AcceptCustomTips != nil {
+		user.AcceptCustomTips = updateData.AcceptCustomTips
+	}
+	if updateData.AcceptMessaging != nil {
+		user.AcceptMessaging = updateData.AcceptMessaging
+	}
+	if updateData.AcceptSubscriptions != nil {
+		user.AcceptSubscriptions = updateData.AcceptSubscriptions
+	}
+	if updateData.ProfilePicture != nil {
+		user.ProfilePicture = *updateData.ProfilePicture
+	}
+	if updateData.CoverPicture != nil {
+		user.CoverPicture = updateData.CoverPicture
+	}
+	if updateData.Location != nil {
+		user.Location = updateData.Location
+	}
+	if updateData.IsVerified != nil {
+		user.IsVerified = updateData.IsVerified
+	}
+
+	// Sauvegarder les modifications
+	if err := database.GetDB().Save(&user).Error; err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la mise à jour du profil")
+		return
+	}
+
+	// Gérer les liens sociaux
+	if updateData.SocialLinks != nil {
+		var socialLinks models.SocialLinks
+		if err := database.GetDB().First(&socialLinks, "user_id = ?", userID).Error; err != nil {
+			// Créer si n'existe pas
+			socialLinks = models.SocialLinks{
+				UserID: userID,
+				Links:  updateData.SocialLinks,
+			}
+			database.GetDB().Create(&socialLinks)
+		} else {
+			// Mettre à jour
+			socialLinks.Links = updateData.SocialLinks
+			database.GetDB().Save(&socialLinks)
+		}
+	}
+
+	response := models.APIResponse{
+		Success: true,
+		Data:    user.ToResponse(),
+		Message: "Profil créateur mis à jour avec succès",
+	}
+
+	respondWithJSON(w, http.StatusOK, response)
+}
+
+// GetCreatorEarnings récupère les gains d'un créateur
+func GetCreatorEarnings(w http.ResponseWriter, r *http.Request) {
+	userID := getUserIDFromContext(r.Context())
+	if userID == "" {
+		respondWithError(w, http.StatusUnauthorized, "Utilisateur non authentifié")
+		return
+	}
+
+	// Vérifier que l'utilisateur est un créateur
+	var user models.User
+	if err := database.GetDB().First(&user, "id = ? AND role = ?", userID, models.RoleCreator).Error; err != nil {
+		respondWithError(w, http.StatusForbidden, "Accès réservé aux créateurs")
+		return
+	}
+
+	var earnings models.CreatorEarnings
+	if err := database.GetDB().First(&earnings, "creator_id = ?", userID).Error; err != nil {
+		// Créer un enregistrement de gains par défaut
+		earnings = models.CreatorEarnings{
+			CreatorID: userID,
+		}
+		database.GetDB().Create(&earnings)
+	}
+
+	response := models.APIResponse{
+		Success: true,
+		Data:    earnings,
+		Message: "Gains récupérés avec succès",
+	}
+
+	respondWithJSON(w, http.StatusOK, response)
+}
+
+// GetCreatorMonthlyEarnings récupère les gains mensuels d'un créateur
+func GetCreatorMonthlyEarnings(w http.ResponseWriter, r *http.Request) {
+	userID := getUserIDFromContext(r.Context())
+	if userID == "" {
+		respondWithError(w, http.StatusUnauthorized, "Utilisateur non authentifié")
+		return
+	}
+
+	// Vérifier que l'utilisateur est un créateur
+	var user models.User
+	if err := database.GetDB().First(&user, "id = ? AND role = ?", userID, models.RoleCreator).Error; err != nil {
+		respondWithError(w, http.StatusForbidden, "Accès réservé aux créateurs")
+		return
+	}
+
+	var monthlyEarnings []models.MonthlyEarning
+	if err := database.GetDB().Where("creator_id = ?", userID).Order("year DESC, month DESC").Find(&monthlyEarnings).Error; err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la récupération des gains mensuels")
+		return
+	}
+
+	response := models.APIResponse{
+		Success: true,
+		Data:    monthlyEarnings,
+		Message: "Gains mensuels récupérés avec succès",
+	}
+
+	respondWithJSON(w, http.StatusOK, response)
+}
+
+// GetCreatorStats récupère les statistiques détaillées d'un créateur
+func GetCreatorStats(w http.ResponseWriter, r *http.Request) {
+	userID := getUserIDFromContext(r.Context())
+	if userID == "" {
+		respondWithError(w, http.StatusUnauthorized, "Utilisateur non authentifié")
+		return
+	}
+
+	// Vérifier que l'utilisateur est un créateur
+	var user models.User
+	if err := database.GetDB().First(&user, "id = ? AND role = ?", userID, models.RoleCreator).Error; err != nil {
+		respondWithError(w, http.StatusForbidden, "Accès réservé aux créateurs")
+		return
+	}
+
+	// Récupérer les statistiques de base
+	var stats models.UserStats
+	if err := database.GetDB().First(&stats, "user_id = ?", userID).Error; err != nil {
+		stats = models.UserStats{UserID: userID}
+		database.GetDB().Create(&stats)
+	}
+
+	// Récupérer les gains
+	var earnings models.CreatorEarnings
+	if err := database.GetDB().First(&earnings, "creator_id = ?", userID).Error; err != nil {
+		earnings = models.CreatorEarnings{CreatorID: userID}
+		database.GetDB().Create(&earnings)
+	}
+
+	// Statistiques détaillées
+	var detailedStats struct {
+		models.UserStats
+		models.CreatorEarnings
+		MessageStats struct {
+			TotalSent        int64   `json:"total_sent"`
+			PaidMessagesSent int64   `json:"paid_messages_sent"`
+			MessageRevenue   float64 `json:"message_revenue"`
+		} `json:"message_stats"`
+		ConversationStats struct {
+			ActiveConversations int64 `json:"active_conversations"`
+			TotalConversations  int64 `json:"total_conversations"`
+		} `json:"conversation_stats"`
+	}
+
+	detailedStats.UserStats = stats
+	detailedStats.CreatorEarnings = earnings
+
+	db := database.GetDB()
+
+	// Statistiques de messages
+	db.Model(&models.Message{}).Where("sender_id = ?", userID).Count(&detailedStats.MessageStats.TotalSent)
+	db.Model(&models.Message{}).Where("sender_id = ? AND is_paid = true", userID).Count(&detailedStats.MessageStats.PaidMessagesSent)
+	db.Model(&models.PaidMessageTransaction{}).Where("creator_id = ?", userID).Select("COALESCE(SUM(creator_amount), 0)").Scan(&detailedStats.MessageStats.MessageRevenue)
+
+	// Statistiques de conversations
+	db.Model(&models.Conversation{}).Where("(user1_id = ? OR user2_id = ?) AND last_message_at > NOW() - INTERVAL '7 days'", userID, userID).Count(&detailedStats.ConversationStats.ActiveConversations)
+	db.Model(&models.Conversation{}).Where("user1_id = ? OR user2_id = ?", userID, userID).Count(&detailedStats.ConversationStats.TotalConversations)
+
+	response := models.APIResponse{
+		Success: true,
+		Data:    detailedStats,
+		Message: "Statistiques détaillées récupérées avec succès",
+	}
+
+	respondWithJSON(w, http.StatusOK, response)
 }

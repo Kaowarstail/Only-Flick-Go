@@ -40,6 +40,8 @@ func RegisterRoutes(router *mux.Router) {
 	RegisterContentRoutes(apiV1)
 	RegisterSubscriptionRoutes(apiV1)
 	RegisterCommunicationRoutes(apiV1)
+	RegisterMessagingRoutes(apiV1)
+	RegisterProfileRoutes(apiV1)
 	RegisterModerationRoutes(apiV1)
 	RegisterPaymentRoutes(apiV1)
 }
