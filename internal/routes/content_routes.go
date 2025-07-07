@@ -19,6 +19,8 @@ func RegisterContentRoutes(router *mux.Router) {
 
 	// Routes protégées pour le contenu
 	router.Handle("/contents", middleware.JWTAuth(http.HandlerFunc(handlers.CreateContent))).Methods("POST", "OPTIONS")
+	router.Handle("/contents/upload", middleware.JWTAuth(http.HandlerFunc(handlers.CreateContentWithMedia))).Methods("POST", "OPTIONS")
+	router.Handle("/contents/upload-image", middleware.JWTAuth(http.HandlerFunc(handlers.UploadContentImage))).Methods("POST", "OPTIONS")
 	router.Handle("/contents/{id}", middleware.JWTAuth(http.HandlerFunc(handlers.UpdateContent))).Methods("PUT", "OPTIONS")
 	router.Handle("/contents/{id}", middleware.JWTAuth(http.HandlerFunc(handlers.DeleteContent))).Methods("DELETE", "OPTIONS")
 	router.Handle("/contents/{id}/media", middleware.JWTAuth(http.HandlerFunc(handlers.UploadContentMedia))).Methods("POST", "OPTIONS")

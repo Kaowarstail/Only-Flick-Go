@@ -85,6 +85,7 @@ type Content struct {
 	MediaURL     string         `json:"media_url"`
 	ThumbnailURL string         `json:"thumbnail_url"`
 	CoverURL     string         `json:"cover_url"`
+	PublicID     string         `json:"public_id"` // ID public Cloudinary pour la suppression
 	IsPremium    bool           `json:"is_premium" gorm:"default:false"`
 	IsPublished  bool           `json:"is_published" gorm:"default:true"`
 	ViewCount    int            `json:"view_count" gorm:"default:0"`
@@ -256,16 +257,16 @@ type Block struct {
 
 // NotificationSettings représente les paramètres de notification d'un utilisateur
 type NotificationSettings struct {
-	ID                   uint   `json:"id" gorm:"primaryKey"`
-	UserID               string `json:"user_id" gorm:"uniqueIndex"`
-	User                 User   `json:"-" gorm:"foreignKey:UserID"`
-	EmailNotifications   bool   `json:"email_notifications" gorm:"default:true"`
-	PushNotifications    bool   `json:"push_notifications" gorm:"default:true"`
-	MessageNotifications bool   `json:"message_notifications" gorm:"default:true"`
-	CommentNotifications bool   `json:"comment_notifications" gorm:"default:true"`
-	LikeNotifications    bool   `json:"like_notifications" gorm:"default:true"`
-	FollowNotifications  bool   `json:"follow_notifications" gorm:"default:true"`
-	ContentNotifications bool   `json:"content_notifications" gorm:"default:true"`
+	ID                   uint      `json:"id" gorm:"primaryKey"`
+	UserID               string    `json:"user_id" gorm:"uniqueIndex"`
+	User                 User      `json:"-" gorm:"foreignKey:UserID"`
+	EmailNotifications   bool      `json:"email_notifications" gorm:"default:true"`
+	PushNotifications    bool      `json:"push_notifications" gorm:"default:true"`
+	MessageNotifications bool      `json:"message_notifications" gorm:"default:true"`
+	CommentNotifications bool      `json:"comment_notifications" gorm:"default:true"`
+	LikeNotifications    bool      `json:"like_notifications" gorm:"default:true"`
+	FollowNotifications  bool      `json:"follow_notifications" gorm:"default:true"`
+	ContentNotifications bool      `json:"content_notifications" gorm:"default:true"`
 	CreatedAt            time.Time `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt            time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 }
