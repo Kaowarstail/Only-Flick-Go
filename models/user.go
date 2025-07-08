@@ -220,19 +220,36 @@ type Transaction struct {
 	UpdatedAt      time.Time     `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
+// PaymentMethod représente une méthode de paiement d'un utilisateur
+type PaymentMethod struct {
+	ID             uint      `json:"id" gorm:"primaryKey"`
+	UserID         string    `json:"user_id"`
+	User           User      `json:"-" gorm:"foreignKey:UserID"`
+	StripeMethodID string    `json:"stripe_method_id" gorm:"not null"`
+	Type           string    `json:"type" gorm:"not null"` // card, bank_account, etc.
+	Last4          string    `json:"last4"`
+	Brand          string    `json:"brand"`
+	ExpiryMonth    int       `json:"expiry_month"`
+	ExpiryYear     int       `json:"expiry_year"`
+	IsDefault      bool      `json:"is_default" gorm:"default:false"`
+	CreatedAt      time.Time `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt      time.Time `json:"updated_at" gorm:"autoUpdateTime"`
+}
+
 // Payout représente un versement à un créateur
 type Payout struct {
-	ID            uint       `json:"id" gorm:"primaryKey"`
-	CreatorID     string     `json:"creator_id"`
-	Creator       User       `json:"-" gorm:"foreignKey:CreatorID"`
-	Amount        float64    `json:"amount" gorm:"not null"`
-	Currency      string     `json:"currency" gorm:"default:'EUR'"`
-	Status        string     `json:"status" gorm:"not null"` // pending, processed, failed
-	PaymentMethod string     `json:"payment_method"`
-	Reference     string     `json:"reference"`
-	ProcessedAt   *time.Time `json:"processed_at"`
-	CreatedAt     time.Time  `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt     time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
+	ID             uint       `json:"id" gorm:"primaryKey"`
+	CreatorID      string     `json:"creator_id"`
+	Creator        User       `json:"-" gorm:"foreignKey:CreatorID"`
+	Amount         float64    `json:"amount" gorm:"not null"`
+	Currency       string     `json:"currency" gorm:"default:'EUR'"`
+	Status         string     `json:"status" gorm:"not null"` // pending, processed, failed
+	PaymentMethod  string     `json:"payment_method"`
+	Reference      string     `json:"reference"`
+	StripePayoutID string     `json:"stripe_payout_id"`
+	ProcessedAt    *time.Time `json:"processed_at"`
+	CreatedAt      time.Time  `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt      time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
 // Follow représente une relation de suivi entre deux utilisateurs

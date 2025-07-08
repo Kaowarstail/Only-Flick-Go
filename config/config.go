@@ -37,6 +37,11 @@ type Configuration struct {
 		APIKey    string
 		APISecret string
 	}
+	Stripe struct {
+		SecretKey      string
+		PublishableKey string
+		WebhookSecret  string
+	}
 }
 
 var (
@@ -83,6 +88,11 @@ func Load() (*Configuration, error) {
 				APIKey    string `json:"api_key"`
 				APISecret string `json:"api_secret"`
 			} `json:"cloudinary"`
+			Stripe struct {
+				SecretKey      string `json:"secret_key"`
+				PublishableKey string `json:"publishable_key"`
+				WebhookSecret  string `json:"webhook_secret"`
+			} `json:"stripe"`
 		}
 
 		if decodeErr := decoder.Decode(&jsonConfig); decodeErr != nil {
@@ -108,6 +118,11 @@ func Load() (*Configuration, error) {
 		config.Cloudinary.CloudName = getEnv("CLOUDINARY_CLOUD_NAME", jsonConfig.Cloudinary.CloudName)
 		config.Cloudinary.APIKey = getEnv("CLOUDINARY_API_KEY", jsonConfig.Cloudinary.APIKey)
 		config.Cloudinary.APISecret = getEnv("CLOUDINARY_API_SECRET", jsonConfig.Cloudinary.APISecret)
+
+		// Stripe : priorité aux variables d'environnement, puis config.json
+		config.Stripe.SecretKey = getEnv("STRIPE_SECRET_KEY", jsonConfig.Stripe.SecretKey)
+		config.Stripe.PublishableKey = getEnv("STRIPE_PUBLISHABLE_KEY", jsonConfig.Stripe.PublishableKey)
+		config.Stripe.WebhookSecret = getEnv("STRIPE_WEBHOOK_SECRET", jsonConfig.Stripe.WebhookSecret)
 
 		// CORS avec valeurs par défaut
 		config.CORS.AllowedOrigins = []string{
@@ -159,6 +174,11 @@ func loadFromEnv() {
 	config.Cloudinary.CloudName = getEnv("CLOUDINARY_CLOUD_NAME", "your-cloud-name")
 	config.Cloudinary.APIKey = getEnv("CLOUDINARY_API_KEY", "your-api-key")
 	config.Cloudinary.APISecret = getEnv("CLOUDINARY_API_SECRET", "your-api-secret")
+
+	// Stripe
+	config.Stripe.SecretKey = getEnv("STRIPE_SECRET_KEY", "your-stripe-secret-key")
+	config.Stripe.PublishableKey = getEnv("STRIPE_PUBLISHABLE_KEY", "your-stripe-publishable-key")
+	config.Stripe.WebhookSecret = getEnv("STRIPE_WEBHOOK_SECRET", "your-stripe-webhook-secret")
 }
 
 // Get retourne la configuration
