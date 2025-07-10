@@ -166,7 +166,8 @@ type Report struct {
 	ReporterID    string     `json:"reporter_id"`
 	Reporter      User       `json:"-" gorm:"foreignKey:ReporterID"`
 	Reason        string     `json:"reason" gorm:"not null"`
-	Status        string     `json:"status" gorm:"default:'pending'"` // pending, reviewed, dismissed	ReviewedBy    *string    `json:"reviewed_by"`
+	Status        string     `json:"status" gorm:"default:'pending'"` // pending, reviewed, dismissed
+	ReviewedBy    *string    `json:"reviewed_by"`
 	ReviewerAdmin *User      `json:"-" gorm:"foreignKey:ReviewedBy"`
 	ReviewedAt    *time.Time `json:"reviewed_at"`
 	CreatedAt     time.Time  `json:"created_at" gorm:"autoCreateTime"`

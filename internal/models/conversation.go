@@ -9,9 +9,9 @@ import (
 
 // Conversation représente une conversation entre deux utilisateurs
 type Conversation struct {
-	ID             uint      `gorm:"primaryKey" json:"id"`
-	Participant1ID string    `gorm:"not null;index" json:"participant_1_id"`
-	Participant2ID string    `gorm:"not null;index" json:"participant_2_id"`
+	ID             uint   `gorm:"primaryKey" json:"id"`
+	Participant1ID string `gorm:"not null;index" json:"participant_1_id"`
+	Participant2ID string `gorm:"not null;index" json:"participant_2_id"`
 
 	// Relations
 	Participant1  models.User `gorm:"foreignKey:Participant1ID" json:"participant_1"`
@@ -40,9 +40,11 @@ func (c *Conversation) BeforeCreate(tx *gorm.DB) error {
 
 // CreateIndexes crée les index uniques pour éviter conversations dupliquées
 func (Conversation) CreateIndexes(db *gorm.DB) error {
+	// Pour SQLite, on va créer un index simple sur les deux participants
+	// La logique de tri est gérée dans BeforeCreate
 	return db.Exec(`
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_participants 
-		ON conversations(LEAST(participant_1_id, participant_2_id), GREATEST(participant_1_id, participant_2_id))
+		ON conversations(participant1_id, participant2_id)
 		WHERE is_active = true
 	`).Error
 }
