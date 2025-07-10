@@ -34,7 +34,6 @@ type User struct {
 	LastLogin       *time.Time `json:"last_login"`
 	CreatedAt       time.Time  `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt       time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
-
 	// Relations
 	Contents          []Content          `json:"-" gorm:"foreignKey:CreatorID"`
 	SubscriptionPlans []SubscriptionPlan `json:"-" gorm:"foreignKey:CreatorID"`
@@ -42,8 +41,6 @@ type User struct {
 	Comments          []Comment          `json:"-" gorm:"foreignKey:UserID"`
 	Likes             []Like             `json:"-" gorm:"foreignKey:UserID"`
 	Notifications     []Notification     `json:"-" gorm:"foreignKey:UserID"`
-	SentMessages      []Message          `json:"-" gorm:"foreignKey:SenderID"`
-	ReceivedMessages  []Message          `json:"-" gorm:"foreignKey:RecipientID"`
 }
 
 // UserResponse est utilisé pour retourner les données utilisateur sans le mot de passe
@@ -169,26 +166,11 @@ type Report struct {
 	ReporterID    string     `json:"reporter_id"`
 	Reporter      User       `json:"-" gorm:"foreignKey:ReporterID"`
 	Reason        string     `json:"reason" gorm:"not null"`
-	Status        string     `json:"status" gorm:"default:'pending'"` // pending, reviewed, dismissed
-	ReviewedBy    *string    `json:"reviewed_by"`
+	Status        string     `json:"status" gorm:"default:'pending'"` // pending, reviewed, dismissed	ReviewedBy    *string    `json:"reviewed_by"`
 	ReviewerAdmin *User      `json:"-" gorm:"foreignKey:ReviewedBy"`
 	ReviewedAt    *time.Time `json:"reviewed_at"`
 	CreatedAt     time.Time  `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt     time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
-}
-
-// Message représente un message privé entre deux utilisateurs
-type Message struct {
-	ID          uint       `json:"id" gorm:"primaryKey"`
-	SenderID    string     `json:"sender_id"`
-	Sender      User       `json:"-" gorm:"foreignKey:SenderID"`
-	RecipientID string     `json:"recipient_id"`
-	Recipient   User       `json:"-" gorm:"foreignKey:RecipientID"`
-	Content     string     `json:"content" gorm:"not null"`
-	IsRead      bool       `json:"is_read" gorm:"default:false"`
-	ReadAt      *time.Time `json:"read_at"`
-	CreatedAt   time.Time  `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt   time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
 // Notification représente une notification envoyée à un utilisateur

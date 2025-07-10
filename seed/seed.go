@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Kaowarstail/Only-Flick-Go/internal/database"
+	messagingModels "github.com/Kaowarstail/Only-Flick-Go/internal/models"
 	"github.com/Kaowarstail/Only-Flick-Go/models"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -456,9 +457,149 @@ func Run() {
 		{UserID: "user-9", ContentID: contents[15].ID, Text: "Your styling tips make high fashion accessible. Love the budget options!"},
 		{UserID: "user-10", ContentID: contents[15].ID, Text: "The color coordination in look #7 is absolutely stunning!"},
 		{UserID: "user-1", ContentID: contents[15].ID, Text: "You have such an eye for putting together outfits. Inspiring!"},
-		{UserID: "user-8", ContentID: contents[16].ID, Text: "The personal color analysis was so accurate! Changed my whole wardrobe approach."},
-	}
+		{UserID: "user-8", ContentID: contents[16].ID, Text: "The personal color analysis was so accurate! Changed my whole wardrobe approach."},	}
 	db.Create(&comments)
+	// --- Conversations et Messages ---
+	log.Println("💬 Création des conversations et messages de test...")
+	
+	// Conversations de test
+	conversations := []messagingModels.Conversation{
+		{
+			Participant1ID: "user-1", // Alice
+			Participant2ID: "user-2", // Bob
+			IsActive:       true,
+		},
+		{
+			Participant1ID: "user-1", // Alice
+			Participant2ID: "user-3", // Carol
+			IsActive:       true,
+		},
+		{
+			Participant1ID: "user-2", // Bob
+			Participant2ID: "user-4", // David
+			IsActive:       true,
+		},
+		{
+			Participant1ID: "user-3", // Carol
+			Participant2ID: "user-5", // Emma
+			IsActive:       true,
+		},
+	}
+	db.Create(&conversations)
+
+	// Messages de test
+	messages := []messagingModels.Message{
+		// Conversation Alice-Bob
+		{
+			ConversationID: conversations[0].ID,
+			SenderID:       "user-1",
+			Content:        stringPtr("Salut Bob ! J'ai vu tes dernières vidéos fitness, vraiment impressionnant ! 💪"),
+			MessageType:    "text",
+			Status:         "read",
+			CreatedAt:      time.Now().Add(-2 * time.Hour),
+		},
+		{
+			ConversationID: conversations[0].ID,
+			SenderID:       "user-2",
+			Content:        stringPtr("Merci Alice ! Tes photos m'inspirent aussi beaucoup. On devrait collaborer !"),
+			MessageType:    "text",
+			Status:         "read",
+			CreatedAt:      time.Now().Add(-90 * time.Minute),
+		},
+		{
+			ConversationID: conversations[0].ID,
+			SenderID:       "user-1",
+			Content:        stringPtr("Excellente idée ! Une séance photo sport/lifestyle ça pourrait être génial 📸"),
+			MessageType:    "text",
+			Status:         "sent",
+			CreatedAt:      time.Now().Add(-30 * time.Minute),
+		},
+
+		// Conversation Alice-Carol
+		{
+			ConversationID: conversations[1].ID,
+			SenderID:       "user-3",
+			Content:        stringPtr("Alice ! J'adore ton style photo culinaire. Tu utilises quelle setup d'éclairage ?"),
+			MessageType:    "text",
+			Status:         "read",
+			CreatedAt:      time.Now().Add(-3 * time.Hour),
+		},
+		{
+			ConversationID: conversations[1].ID,
+			SenderID:       "user-1",
+			Content:        stringPtr("Merci Carol ! J'utilise principalement la lumière naturelle avec des réflecteurs. Je peux t'envoyer ma setup complète si ça t'intéresse !"),
+			MessageType:    "text",
+			Status:         "read",
+			CreatedAt:      time.Now().Add(-2 * time.Hour + 30 * time.Minute),
+		},
+		{
+			ConversationID: conversations[1].ID,
+			SenderID:       "user-3",
+			Content:        stringPtr("Oh oui s'il te plaît ! Et si on faisait un shooting ensemble ? Mes plats avec ton style photo ça serait parfait ! 👨‍🍳📷"),
+			MessageType:    "text",
+			Status:         "delivered",
+			CreatedAt:      time.Now().Add(-45 * time.Minute),
+		},
+
+		// Conversation Bob-David
+		{
+			ConversationID: conversations[2].ID,
+			SenderID:       "user-4",
+			Content:        stringPtr("Salut Bob ! Ton programme d'entraînement m'a aidé à perdre 10kg ! Merci mec 🙏"),
+			MessageType:    "text",
+			Status:         "read",
+			CreatedAt:      time.Now().Add(-1 * time.Hour),
+		},
+		{
+			ConversationID: conversations[2].ID,
+			SenderID:       "user-2",
+			Content:        stringPtr("C'est fantastique David ! Je suis super fier de toi ! Continue comme ça ! 💪🔥"),
+			MessageType:    "text",
+			Status:         "sent",
+			CreatedAt:      time.Now().Add(-20 * time.Minute),
+		},
+
+		// Conversation Carol-Emma
+		{
+			ConversationID: conversations[3].ID,
+			SenderID:       "user-5",
+			Content:        stringPtr("Carol, ta recette de gâteau au chocolat était DIVINE ! Ma famille a adoré ! 🍰"),
+			MessageType:    "text",
+			Status:         "read",
+			CreatedAt:      time.Now().Add(-6 * time.Hour),
+		},
+		{
+			ConversationID: conversations[3].ID,
+			SenderID:       "user-3",
+			Content:        stringPtr("Ça me fait tellement plaisir Emma ! La cuisine c'est fait pour être partagé ❤️"),
+			MessageType:    "text",
+			Status:         "read",
+			CreatedAt:      time.Now().Add(-5 * time.Hour),
+		},
+		{
+			ConversationID: conversations[3].ID,
+			SenderID:       "user-5",
+			Content:        stringPtr("Tu aurais une recette pour un anniversaire ? C'est pour ma petite fille, elle adore les licornes 🦄"),
+			MessageType:    "text",
+			Status:         "sent",
+			CreatedAt:      time.Now().Add(-10 * time.Minute),
+		},
+	}
+	db.Create(&messages)
+	// Mettre à jour les last_message_id des conversations
+	for i, conv := range conversations {
+		// Trouver le dernier message de chaque conversation
+		var lastMessage messagingModels.Message
+		db.Where("conversation_id = ?", conv.ID).Order("created_at DESC").First(&lastMessage)
+		
+		// Mettre à jour la conversation
+		db.Model(&conversations[i]).Update("last_message_id", lastMessage.ID)
+	}
 
 	log.Println("✅ Seed terminé avec succès.")
+}
+
+// Helper function to create string pointers
+func stringPtr(s string) *string {
+	return &s
 }

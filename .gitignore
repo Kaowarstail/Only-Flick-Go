@@ -55,5 +55,13 @@ Thumbs.db
 # Fichiers de test de couverture
 coverage.txt
 *.cover
-*.coverprofile.env
+*.coverprofile
+
+# Fichiers de test temporaires
+dev_database.db
+test_database.db
+nul
+
+# Fichiers de configuration sensibles
 .env
+.env.*

@@ -51,9 +51,7 @@ func Initialize() error {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	log.Println("Connected to database successfully")
-
-	// Migration automatique des schémas
+	log.Println("Connected to database successfully")	// Migration automatique des schémas
 	log.Println("Running database migrations...")
 	err = DB.AutoMigrate(
 		&models.User{},
@@ -64,7 +62,6 @@ func Initialize() error {
 		&models.Comment{},
 		&models.Like{},
 		&models.Report{},
-		&models.Message{},
 		&models.Notification{},
 		&models.Transaction{},
 		&models.Payout{},
@@ -73,7 +70,21 @@ func Initialize() error {
 		return fmt.Errorf("failed to run migrations: %w", err)
 	}
 
+	// Exécuter les migrations spécifiques à la messagerie
+	log.Println("Running messaging system migrations...")
+	if err := RunMessagingMigrations(DB); err != nil {
+		return fmt.Errorf("failed to run messaging migrations: %w", err)
+	}
 	log.Println("Database migrations completed successfully")
+
+	// Initialiser le schéma de messagerie
+	log.Println("Initializing messaging schema...")
+	if err := InitializeMessagingSchema(DB); err != nil {
+		log.Printf("Warning: Failed to initialize messaging schema: %v", err)
+	} else {
+		log.Println("Messaging schema initialized successfully")
+	}
+
 	return nil
 }
 
