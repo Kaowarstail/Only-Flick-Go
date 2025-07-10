@@ -29,6 +29,7 @@ type User struct {
 	IsActive        bool       `json:"is_active" gorm:"default:true"`
 	IsBanned        bool       `json:"is_banned" gorm:"default:false"`
 	BanReason       string     `json:"ban_reason"`
+	BannedAt        *time.Time `json:"banned_at"`
 	IsEmailVerified bool       `json:"is_email_verified" gorm:"default:false"`
 	LastLogin       *time.Time `json:"last_login"`
 	CreatedAt       time.Time  `json:"created_at" gorm:"autoCreateTime"`

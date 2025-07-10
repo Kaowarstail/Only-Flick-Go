@@ -9,6 +9,7 @@ import (
 
 	"github.com/Kaowarstail/Only-Flick-Go/config"
 	"github.com/Kaowarstail/Only-Flick-Go/internal/utils"
+	"github.com/Kaowarstail/Only-Flick-Go/models"
 )
 
 // Clés de contexte pour stocker des informations dans la requête HTTP
@@ -27,7 +28,7 @@ func JWTAuth(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		
+
 		// Récupération du token depuis l'en-tête Authorization
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
@@ -83,4 +84,31 @@ func JWTAuth(next http.Handler) http.Handler {
 func GetUserIDFromContext(ctx context.Context) (string, bool) {
 	userID, ok := ctx.Value(UserIDKey).(string)
 	return userID, ok
+}
+
+// AdminRequired vérifie que l'utilisateur authentifié est un administrateur
+func AdminRequired(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Permettre les requêtes preflight OPTIONS
+		if r.Method == "OPTIONS" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Récupérer le rôle utilisateur du contexte
+		userRole, ok := r.Context().Value(UserRoleKey).(string)
+		if !ok {
+			http.Error(w, "Rôle utilisateur non trouvé dans la requête", http.StatusUnauthorized)
+			return
+		}
+
+		// Vérifier que l'utilisateur est admin
+		if userRole != string(models.RoleAdmin) {
+			http.Error(w, "Accès réservé aux administrateurs", http.StatusForbidden)
+			return
+		}
+
+		// L'utilisateur est admin, continuer
+		next.ServeHTTP(w, r)
+	})
 }

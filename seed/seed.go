@@ -6,6 +6,7 @@ import (
 
 	"github.com/Kaowarstail/Only-Flick-Go/internal/database"
 	"github.com/Kaowarstail/Only-Flick-Go/models"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func Run() {
@@ -13,64 +14,79 @@ func Run() {
 
 	log.Println("🌱 Début du seed de la base de données...")
 
+	// Helper function to hash passwords
+	hashPassword := func(password string) string {
+		hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			log.Fatal("Erreur lors du hachage du mot de passe:", err)
+		}
+		return string(hashed)
+	}
+
 	// --- Utilisateurs ---
 	users := []models.User{
 		{
-			ID: "user-1", Username: "alice_photographer", Email: "alice@example.com", Password: "-",
+			ID: "admin-1", Username: "admin", Email: "admin@onlyflick.com", Password: hashPassword("admin123"),
+			Role: models.RoleAdmin, FirstName: "Admin", LastName: "OnlyFlick",
+			Biography:      "Administrateur principal de la plateforme OnlyFlick 👑",
+			ProfilePicture: "https://i.pravatar.cc/300?img=35", IsActive: true, IsEmailVerified: true,
+		},
+		{
+			ID: "user-1", Username: "alice_photographer", Email: "alice@example.com", Password: hashPassword("password123"),
 			Role: models.RoleCreator, FirstName: "Alice", LastName: "Johnson",
 			Biography:      "Professional photographer and visual artist. Capturing life's beautiful moments 📸✨",
 			ProfilePicture: "https://i.pravatar.cc/300?img=1", IsActive: true, IsEmailVerified: true,
 		},
 		{
-			ID: "user-2", Username: "bob_fitness", Email: "bob@example.com", Password: "-",
+			ID: "user-2", Username: "bob_fitness", Email: "bob@example.com", Password: hashPassword("password123"),
 			Role: models.RoleCreator, FirstName: "Bob", LastName: "Wilson",
 			Biography:      "Fitness coach & nutrition expert. Transform your body and mind 💪🏋️‍♂️",
 			ProfilePicture: "https://i.pravatar.cc/300?img=11", IsActive: true, IsEmailVerified: true,
 		},
 		{
-			ID: "user-3", Username: "carol_chef", Email: "carol@example.com", Password: "-",
+			ID: "user-3", Username: "carol_chef", Email: "carol@example.com", Password: hashPassword("password123"),
 			Role: models.RoleCreator, FirstName: "Carol", LastName: "Martinez",
 			Biography:      "Chef & food stylist. Bringing delicious recipes to your kitchen 👩‍🍳🍽️",
 			ProfilePicture: "https://i.pravatar.cc/300?img=5", IsActive: true, IsEmailVerified: true,
 		},
 		{
-			ID: "user-4", Username: "david_traveler", Email: "david@example.com", Password: "-",
+			ID: "user-4", Username: "david_traveler", Email: "david@example.com", Password: hashPassword("password123"),
 			Role: models.RoleCreator, FirstName: "David", LastName: "Chen",
 			Biography:      "World traveler & adventure seeker. Join me on epic journeys ✈️🌍",
 			ProfilePicture: "https://i.pravatar.cc/300?img=33", IsActive: true, IsEmailVerified: true,
 		},
 		{
-			ID: "user-5", Username: "emma_artist", Email: "emma@example.com", Password: "-",
+			ID: "user-5", Username: "emma_artist", Email: "emma@example.com", Password: hashPassword("password123"),
 			Role: models.RoleCreator, FirstName: "Emma", LastName: "Davis",
 			Biography:      "Digital artist & illustrator. Creating magic through pixels 🎨✨",
 			ProfilePicture: "https://i.pravatar.cc/300?img=9", IsActive: true, IsEmailVerified: true,
 		},
 		{
-			ID: "user-6", Username: "frank_musician", Email: "frank@example.com", Password: "-",
+			ID: "user-6", Username: "frank_musician", Email: "frank@example.com", Password: hashPassword("password123"),
 			Role: models.RoleCreator, FirstName: "Frank", LastName: "Thompson",
 			Biography:      "Musician & producer. Sharing the rhythm of life 🎵🎹",
 			ProfilePicture: "https://i.pravatar.cc/300?img=12", IsActive: true, IsEmailVerified: true,
 		},
 		{
-			ID: "user-7", Username: "grace_stylist", Email: "grace@example.com", Password: "-",
+			ID: "user-7", Username: "grace_stylist", Email: "grace@example.com", Password: hashPassword("password123"),
 			Role: models.RoleCreator, FirstName: "Grace", LastName: "Kim",
 			Biography:      "Fashion stylist & trend setter. Style is a way to say who you are 👗💄",
 			ProfilePicture: "https://i.pravatar.cc/300?img=20", IsActive: true, IsEmailVerified: true,
 		},
 		{
-			ID: "user-8", Username: "henry_tech", Email: "henry@example.com", Password: "-",
+			ID: "user-8", Username: "henry_tech", Email: "henry@example.com", Password: hashPassword("password123"),
 			FirstName: "Henry", LastName: "Rodriguez",
 			Biography:      "Tech enthusiast and early adopter. Always exploring the latest innovations 💻📱",
 			ProfilePicture: "https://i.pravatar.cc/300?img=15", IsActive: true, IsEmailVerified: true,
 		},
 		{
-			ID: "user-9", Username: "irene_bookworm", Email: "irene@example.com", Password: "-",
+			ID: "user-9", Username: "irene_bookworm", Email: "irene@example.com", Password: hashPassword("password123"),
 			FirstName: "Irene", LastName: "Brown",
 			Biography:      "Book lover and literature enthusiast. Lost in the world of stories 📚✍️",
 			ProfilePicture: "https://i.pravatar.cc/300?img=16", IsActive: true, IsEmailVerified: true,
 		},
 		{
-			ID: "user-10", Username: "jack_gamer", Email: "jack@example.com", Password: "-",
+			ID: "user-10", Username: "jack_gamer", Email: "jack@example.com", Password: hashPassword("password123"),
 			FirstName: "Jack", LastName: "Taylor",
 			Biography:      "Professional gamer and streamer. Level up with me! 🎮🕹️",
 			ProfilePicture: "https://i.pravatar.cc/300?img=13", IsActive: true, IsEmailVerified: true,
