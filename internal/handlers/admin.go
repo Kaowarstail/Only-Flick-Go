@@ -12,6 +12,21 @@ import (
 	"github.com/gorilla/mux"
 )
 
+// Fonction utilitaire pour la pagination
+func getPaginationParams(r *http.Request) (int, int) {
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+
+	return page, limit
+}
+
 // Structures pour les réponses admin
 type AdminContentResponse struct {
 	ID                  uint      `json:"id"`
@@ -130,25 +145,56 @@ func GetDashboardStats(w http.ResponseWriter, r *http.Request) {
 	db.Model(&models.User{}).Where("created_at >= ?", weekAgo).Count(&newUsersWeek)
 	db.Model(&models.User{}).Where("created_at >= ?", monthAgo).Count(&newUsersMonth)
 
-	// 5. Signalements en attente
-	var pendingReports int64
+	// 5. Signalements
+	var totalReports, pendingReports, resolvedReports, reportsToday, reportsWeek int64
+	db.Model(&models.Report{}).Count(&totalReports)
 	db.Model(&models.Report{}).Where("status = ?", "pending").Count(&pendingReports)
+	db.Model(&models.Report{}).Where("status = ?", "resolved").Count(&resolvedReports)
+	db.Model(&models.Report{}).Where("created_at >= ?", now.Truncate(24*time.Hour)).Count(&reportsToday)
+	db.Model(&models.Report{}).Where("created_at >= ?", weekAgo).Count(&reportsWeek)
 
-	// Construire la réponse
-	overview := models.DashboardStats{
-		TotalUsers:       int(totalUsers),
-		TotalCreators:    int(totalCreators),
-		TotalSubscribers: int(totalSubscribers),
-		TotalRevenue:     totalRevenue,
-		MonthlyRevenue:   monthlyRevenue,
-		WeeklyRevenue:    weeklyRevenue,
-		TotalContents:    int(totalContents),
-		NewUsersWeek:     int(newUsersWeek),
-		NewUsersMonth:    int(newUsersMonth),
-		PendingReports:   int(pendingReports),
+	// 6. Statistiques de contenu par période
+	var contentsToday, contentsWeek, contentsMonth int64
+	var freeContents, premiumContents int64
+	db.Model(&models.Content{}).Where("created_at >= ?", now.Truncate(24*time.Hour)).Count(&contentsToday)
+	db.Model(&models.Content{}).Where("created_at >= ?", weekAgo).Count(&contentsWeek)
+	db.Model(&models.Content{}).Where("created_at >= ?", monthAgo).Count(&contentsMonth)
+	db.Model(&models.Content{}).Where("is_premium = ?", false).Count(&freeContents)
+	db.Model(&models.Content{}).Where("is_premium = ?", true).Count(&premiumContents)
+
+	// Construire la réponse complète avec toutes les stats
+	response := map[string]interface{}{
+		"overview": models.DashboardStats{
+			TotalUsers:       int(totalUsers),
+			TotalCreators:    int(totalCreators),
+			TotalSubscribers: int(totalSubscribers),
+			TotalRevenue:     totalRevenue,
+			MonthlyRevenue:   monthlyRevenue,
+			WeeklyRevenue:    weeklyRevenue,
+			TotalContents:    int(totalContents),
+			NewUsersWeek:     int(newUsersWeek),
+			NewUsersMonth:    int(newUsersMonth),
+			PendingReports:   int(pendingReports),
+		},
+		"content_stats": map[string]interface{}{
+			"total_contents":   int(totalContents),
+			"free_contents":    int(freeContents),
+			"premium_contents": int(premiumContents),
+			"contents_today":   int(contentsToday),
+			"contents_week":    int(contentsWeek),
+			"contents_month":   int(contentsMonth),
+		},
+		"report_stats": map[string]interface{}{
+			"total_reports":    int(totalReports),
+			"pending_reports":  int(pendingReports),
+			"resolved_reports": int(resolvedReports),
+			"reports_today":    int(reportsToday),
+			"reports_week":     int(reportsWeek),
+		},
+		"generated_at": now,
 	}
 
-	respondWithJSON(w, http.StatusOK, overview)
+	respondWithJSON(w, http.StatusOK, response)
 }
 
 // GetAdminUsers récupère la liste des utilisateurs pour l'admin
@@ -156,16 +202,7 @@ func GetAdminUsers(w http.ResponseWriter, r *http.Request) {
 	db := database.GetDB()
 
 	// Pagination
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-	if page < 1 {
-		page = 1
-	}
-
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit < 1 || limit > 100 {
-		limit = 20
-	}
-
+	page, limit := getPaginationParams(r)
 	offset := (page - 1) * limit
 
 	// Filtres
@@ -235,16 +272,7 @@ func GetAdminContents(w http.ResponseWriter, r *http.Request) {
 	db := database.GetDB()
 
 	// Pagination
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-	if page < 1 {
-		page = 1
-	}
-
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit < 1 || limit > 100 {
-		limit = 20
-	}
-
+	page, limit := getPaginationParams(r)
 	offset := (page - 1) * limit
 
 	// Filtres
@@ -339,16 +367,7 @@ func GetRecentReports(w http.ResponseWriter, r *http.Request) {
 	db := database.GetDB()
 
 	// Pagination
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-	if page < 1 {
-		page = 1
-	}
-
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit < 1 || limit > 100 {
-		limit = 20
-	}
-
+	page, limit := getPaginationParams(r)
 	offset := (page - 1) * limit
 
 	// Récupérer les signalements avec les relations
