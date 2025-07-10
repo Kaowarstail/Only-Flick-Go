@@ -77,6 +77,31 @@ type ReportResponse struct {
 	CreatedAt    time.Time `json:"created_at"`
 }
 
+type AdminContentDetails struct {
+	AdminContentResponse
+	Comments []AdminCommentResponse `json:"comments"`
+	Reports  []AdminReportResponse  `json:"reports"`
+	Stats    map[string]interface{} `json:"stats"`
+}
+
+type AdminCommentResponse struct {
+	ID        uint      `json:"id"`
+	UserID    string    `json:"user_id"`
+	Username  string    `json:"username"`
+	Content   string    `json:"content"`
+	IsFlagged bool      `json:"is_flagged"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type AdminReportResponse struct {
+	ID           uint      `json:"id"`
+	ReporterID   string    `json:"reporter_id"`
+	ReporterName string    `json:"reporter_name"`
+	Reason       string    `json:"reason"`
+	Status       string    `json:"status"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
 // GetDashboardStats récupère les statistiques du dashboard admin
 func GetDashboardStats(w http.ResponseWriter, r *http.Request) {
 	db := database.GetDB()
@@ -668,32 +693,65 @@ func GetAdminContentDetails(w http.ResponseWriter, r *http.Request) {
 	var reports []models.Report
 	db.Preload("Reporter").Where("content_id = ?", content.ID).Order("created_at DESC").Find(&reports)
 
+	// Convertir les commentaires
+	var commentResponses []AdminCommentResponse
+	for _, comment := range comments {
+		commentResponses = append(commentResponses, AdminCommentResponse{
+			ID:        comment.ID,
+			UserID:    comment.UserID,
+			Username:  comment.User.Username,
+			Content:   comment.Text,
+			IsFlagged: comment.IsHidden,
+			CreatedAt: comment.CreatedAt,
+		})
+	}
+
+	// Convertir les signalements
+	var reportResponses []AdminReportResponse
+	for _, report := range reports {
+		reporterName := report.Reporter.FirstName + " " + report.Reporter.LastName
+		if reporterName == " " {
+			reporterName = report.Reporter.Username
+		}
+
+		reportResponses = append(reportResponses, AdminReportResponse{
+			ID:           report.ID,
+			ReporterID:   report.ReporterID,
+			ReporterName: reporterName,
+			Reason:       report.Reason,
+			Status:       report.Status,
+			CreatedAt:    report.CreatedAt,
+		})
+	}
+
 	// Construire la réponse détaillée
-	contentDetails := map[string]interface{}{
-		"id":                    content.ID,
-		"creator_id":            content.CreatorID,
-		"creator_name":          creatorName,
-		"creator_username":      content.Creator.Username,
-		"creator_profile_image": content.Creator.ProfilePicture,
-		"title":                 content.Title,
-		"description":           content.Description,
-		"type":                  content.Type,
-		"media_url":             content.MediaURL,
-		"thumbnail_url":         content.ThumbnailURL,
-		"cover_url":             content.CoverURL,
-		"public_id":             content.PublicID,
-		"is_premium":            content.IsPremium,
-		"is_published":          content.IsPublished,
-		"view_count":            content.ViewCount,
-		"is_flagged":            content.IsFlagged,
-		"created_at":            content.CreatedAt,
-		"updated_at":            content.UpdatedAt,
-		"likes_count":           int(likesCount),
-		"comments_count":        int(commentsCount),
-		"reports_count":         int(reportsCount),
-		"comments":              comments,
-		"reports":               reports,
-		"stats": map[string]interface{}{
+	contentDetails := AdminContentDetails{
+		AdminContentResponse: AdminContentResponse{
+			ID:                  content.ID,
+			CreatorID:           content.CreatorID,
+			CreatorName:         creatorName,
+			CreatorUsername:     content.Creator.Username,
+			CreatorProfileImage: content.Creator.ProfilePicture,
+			Title:               content.Title,
+			Description:         content.Description,
+			Type:                content.Type,
+			MediaURL:            content.MediaURL,
+			ThumbnailURL:        content.ThumbnailURL,
+			CoverURL:            content.CoverURL,
+			PublicID:            content.PublicID,
+			IsPremium:           content.IsPremium,
+			IsPublished:         content.IsPublished,
+			ViewCount:           content.ViewCount,
+			IsFlagged:           content.IsFlagged,
+			CreatedAt:           content.CreatedAt,
+			UpdatedAt:           content.UpdatedAt,
+			LikesCount:          int(likesCount),
+			CommentsCount:       int(commentsCount),
+			ReportsCount:        int(reportsCount),
+		},
+		Comments: commentResponses,
+		Reports:  reportResponses,
+		Stats: map[string]interface{}{
 			"engagement_rate": float64(likesCount+commentsCount) / float64(content.ViewCount+1) * 100,
 		},
 	}
