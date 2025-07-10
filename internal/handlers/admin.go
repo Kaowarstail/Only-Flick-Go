@@ -359,11 +359,9 @@ func GetRecentReports(w http.ResponseWriter, r *http.Request) {
 
 // UpdateUserRole met à jour le rôle d'un utilisateur
 func UpdateUserRole(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	userID := vars["id"]
-
 	var requestBody struct {
-		Role string `json:"role"`
+		UserID string `json:"user_id"`
+		Role   string `json:"role"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
@@ -380,7 +378,7 @@ func UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 	}
 
 	db := database.GetDB()
-	result := db.Model(&models.User{}).Where("id = ?", userID).Update("role", requestBody.Role)
+	result := db.Model(&models.User{}).Where("id = ?", requestBody.UserID).Update("role", requestBody.Role)
 
 	if result.Error != nil {
 		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la mise à jour")
@@ -507,4 +505,395 @@ func UpdateReportStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondWithJSON(w, http.StatusOK, map[string]string{"message": "Statut mis à jour avec succès"})
+}
+
+// UpdateUserStatus met à jour le statut d'un utilisateur (ban/unban)
+func UpdateUserStatus(w http.ResponseWriter, r *http.Request) {
+	var requestBody struct {
+		UserID   string `json:"user_id"`
+		IsBanned bool   `json:"is_banned"`
+		Reason   string `json:"reason,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Données invalides")
+		return
+	}
+
+	db := database.GetDB()
+
+	var updates map[string]interface{}
+
+	if requestBody.IsBanned {
+		now := time.Now()
+		updates = map[string]interface{}{
+			"is_banned":  true,
+			"ban_reason": requestBody.Reason,
+			"banned_at":  &now,
+		}
+	} else {
+		updates = map[string]interface{}{
+			"is_banned":  false,
+			"ban_reason": "",
+			"banned_at":  nil,
+		}
+	}
+
+	result := db.Model(&models.User{}).Where("id = ?", requestBody.UserID).Updates(updates)
+
+	if result.Error != nil {
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la mise à jour du statut")
+		return
+	}
+
+	if result.RowsAffected == 0 {
+		respondWithError(w, http.StatusNotFound, "Utilisateur non trouvé")
+		return
+	}
+
+	var message string
+	if requestBody.IsBanned {
+		message = "Utilisateur banni avec succès"
+	} else {
+		message = "Utilisateur débanni avec succès"
+	}
+
+	respondWithJSON(w, http.StatusOK, map[string]string{"message": message})
+}
+
+// DeleteUser supprime un utilisateur
+func DeleteUser(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userID := vars["id"]
+
+	var requestBody struct {
+		Reason string `json:"reason,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+		// Si pas de body, on continue quand même
+		requestBody.Reason = ""
+	}
+
+	db := database.GetDB()
+	result := db.Delete(&models.User{}, "id = ?", userID)
+
+	if result.Error != nil {
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la suppression")
+		return
+	}
+
+	if result.RowsAffected == 0 {
+		respondWithError(w, http.StatusNotFound, "Utilisateur non trouvé")
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, map[string]string{"message": "Utilisateur supprimé avec succès"})
+}
+
+// GetUserDetails récupère les détails d'un utilisateur pour l'admin
+func GetUserDetails(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userID := vars["id"]
+
+	if userID == "" {
+		respondWithError(w, http.StatusBadRequest, "ID utilisateur requis")
+		return
+	}
+
+	db := database.GetDB()
+	var user models.User
+	result := db.First(&user, "id = ?", userID)
+
+	if result.Error != nil {
+		respondWithError(w, http.StatusNotFound, "Utilisateur non trouvé")
+		return
+	}
+
+	// Convertir en réponse admin
+	userResponse := AdminUserResponse{
+		ID:              user.ID,
+		Username:        user.Username,
+		Email:           user.Email,
+		FirstName:       user.FirstName,
+		LastName:        user.LastName,
+		Role:            string(user.Role),
+		IsActive:        user.IsActive,
+		IsBanned:        user.IsBanned,
+		BanReason:       user.BanReason,
+		IsEmailVerified: user.IsEmailVerified,
+		CreatedAt:       user.CreatedAt,
+		UpdatedAt:       user.UpdatedAt,
+	}
+
+	respondWithJSON(w, http.StatusOK, userResponse)
+}
+
+// GetAdminContentDetails récupère les détails d'un contenu pour l'admin
+func GetAdminContentDetails(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	contentID := vars["id"]
+
+	if contentID == "" {
+		respondWithError(w, http.StatusBadRequest, "ID contenu requis")
+		return
+	}
+
+	db := database.GetDB()
+	var content models.Content
+	result := db.Preload("Creator").Preload("Comments.User").First(&content, "id = ?", contentID)
+
+	if result.Error != nil {
+		respondWithError(w, http.StatusNotFound, "Contenu non trouvé")
+		return
+	}
+
+	// Compter les likes, commentaires et signalements
+	var likesCount, commentsCount, reportsCount int64
+	db.Model(&models.Like{}).Where("content_id = ?", content.ID).Count(&likesCount)
+	db.Model(&models.Comment{}).Where("content_id = ?", content.ID).Count(&commentsCount)
+	db.Model(&models.Report{}).Where("content_id = ?", content.ID).Count(&reportsCount)
+
+	// Générer le nom complet du créateur
+	creatorName := content.Creator.FirstName + " " + content.Creator.LastName
+	if creatorName == " " {
+		creatorName = content.Creator.Username
+	}
+
+	// Récupérer les commentaires récents
+	var comments []models.Comment
+	db.Preload("User").Where("content_id = ?", content.ID).Order("created_at DESC").Limit(10).Find(&comments)
+
+	// Récupérer les signalements
+	var reports []models.Report
+	db.Preload("Reporter").Where("content_id = ?", content.ID).Order("created_at DESC").Find(&reports)
+
+	// Construire la réponse détaillée
+	contentDetails := map[string]interface{}{
+		"id":                    content.ID,
+		"creator_id":            content.CreatorID,
+		"creator_name":          creatorName,
+		"creator_username":      content.Creator.Username,
+		"creator_profile_image": content.Creator.ProfilePicture,
+		"title":                 content.Title,
+		"description":           content.Description,
+		"type":                  content.Type,
+		"media_url":             content.MediaURL,
+		"thumbnail_url":         content.ThumbnailURL,
+		"cover_url":             content.CoverURL,
+		"public_id":             content.PublicID,
+		"is_premium":            content.IsPremium,
+		"is_published":          content.IsPublished,
+		"view_count":            content.ViewCount,
+		"is_flagged":            content.IsFlagged,
+		"created_at":            content.CreatedAt,
+		"updated_at":            content.UpdatedAt,
+		"likes_count":           int(likesCount),
+		"comments_count":        int(commentsCount),
+		"reports_count":         int(reportsCount),
+		"comments":              comments,
+		"reports":               reports,
+		"stats": map[string]interface{}{
+			"engagement_rate": float64(likesCount+commentsCount) / float64(content.ViewCount+1) * 100,
+		},
+	}
+
+	respondWithJSON(w, http.StatusOK, contentDetails)
+}
+
+// UpdateAdminContent met à jour un contenu depuis l'interface admin
+func UpdateAdminContent(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	contentID := vars["id"]
+
+	if contentID == "" {
+		respondWithError(w, http.StatusBadRequest, "ID contenu requis")
+		return
+	}
+
+	var requestBody struct {
+		Title       *string `json:"title,omitempty"`
+		Description *string `json:"description,omitempty"`
+		IsPremium   *bool   `json:"is_premium,omitempty"`
+		IsPublished *bool   `json:"is_published,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Données invalides")
+		return
+	}
+
+	db := database.GetDB()
+	var content models.Content
+	result := db.First(&content, "id = ?", contentID)
+
+	if result.Error != nil {
+		respondWithError(w, http.StatusNotFound, "Contenu non trouvé")
+		return
+	}
+
+	// Appliquer les mises à jour
+	updates := map[string]interface{}{}
+
+	if requestBody.Title != nil {
+		updates["title"] = *requestBody.Title
+	}
+	if requestBody.Description != nil {
+		updates["description"] = *requestBody.Description
+	}
+	if requestBody.IsPremium != nil {
+		updates["is_premium"] = *requestBody.IsPremium
+	}
+	if requestBody.IsPublished != nil {
+		updates["is_published"] = *requestBody.IsPublished
+	}
+
+	if len(updates) > 0 {
+		result = db.Model(&content).Updates(updates)
+		if result.Error != nil {
+			respondWithError(w, http.StatusInternalServerError, "Erreur lors de la mise à jour")
+			return
+		}
+	}
+
+	respondWithJSON(w, http.StatusOK, map[string]string{"message": "Contenu mis à jour avec succès"})
+}
+
+// DeleteAdminContent supprime un contenu depuis l'interface admin
+func DeleteAdminContent(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	contentID := vars["id"]
+
+	if contentID == "" {
+		respondWithError(w, http.StatusBadRequest, "ID contenu requis")
+		return
+	}
+
+	var requestBody struct {
+		Reason string `json:"reason,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+		// Si pas de body, on continue quand même
+		requestBody.Reason = ""
+	}
+
+	db := database.GetDB()
+	var content models.Content
+	result := db.First(&content, "id = ?", contentID)
+
+	if result.Error != nil {
+		respondWithError(w, http.StatusNotFound, "Contenu non trouvé")
+		return
+	}
+
+	// Supprimer le contenu (soft delete)
+	result = db.Delete(&content)
+	if result.Error != nil {
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la suppression")
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, map[string]string{"message": "Contenu supprimé avec succès"})
+}
+
+// UpdateContentStatus met à jour le statut d'un contenu (approuver/rejeter)
+func UpdateContentStatus(w http.ResponseWriter, r *http.Request) {
+	var requestBody struct {
+		ContentID string `json:"content_id"`
+		Status    string `json:"status"`
+		Reason    string `json:"reason,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Données invalides")
+		return
+	}
+
+	// Vérifier que le statut est valide
+	if requestBody.Status != "approved" && requestBody.Status != "rejected" && requestBody.Status != "flagged" {
+		respondWithError(w, http.StatusBadRequest, "Statut invalide")
+		return
+	}
+
+	db := database.GetDB()
+
+	updates := map[string]interface{}{}
+
+	switch requestBody.Status {
+	case "approved":
+		updates["is_published"] = true
+		updates["is_flagged"] = false
+	case "rejected":
+		updates["is_published"] = false
+		updates["is_flagged"] = false
+	case "flagged":
+		updates["is_flagged"] = true
+		updates["is_published"] = false
+	}
+
+	result := db.Model(&models.Content{}).Where("id = ?", requestBody.ContentID).Updates(updates)
+
+	if result.Error != nil {
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la mise à jour")
+		return
+	}
+
+	if result.RowsAffected == 0 {
+		respondWithError(w, http.StatusNotFound, "Contenu non trouvé")
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, map[string]string{"message": "Statut mis à jour avec succès"})
+}
+
+// FlagContent marque/démarque un contenu comme inapproprié
+func FlagContent(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	contentID := vars["id"]
+
+	if contentID == "" {
+		respondWithError(w, http.StatusBadRequest, "ID contenu requis")
+		return
+	}
+
+	var requestBody struct {
+		IsFlagged bool   `json:"is_flagged"`
+		Reason    string `json:"reason,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Données invalides")
+		return
+	}
+
+	db := database.GetDB()
+
+	updates := map[string]interface{}{
+		"is_flagged": requestBody.IsFlagged,
+	}
+
+	// Si on flagge le contenu, on le dépublie aussi
+	if requestBody.IsFlagged {
+		updates["is_published"] = false
+	}
+
+	result := db.Model(&models.Content{}).Where("id = ?", contentID).Updates(updates)
+
+	if result.Error != nil {
+		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la mise à jour")
+		return
+	}
+
+	if result.RowsAffected == 0 {
+		respondWithError(w, http.StatusNotFound, "Contenu non trouvé")
+		return
+	}
+
+	message := "Contenu déflaggé avec succès"
+	if requestBody.IsFlagged {
+		message = "Contenu flaggé avec succès"
+	}
+
+	respondWithJSON(w, http.StatusOK, map[string]string{"message": message})
 }

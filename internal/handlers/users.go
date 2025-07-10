@@ -139,33 +139,3 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 	respondWithJSON(w, http.StatusOK, user.ToResponse())
 }
-
-// DeleteUser supprime un utilisateur
-func DeleteUser(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id := vars["id"]
-
-	var user models.User
-	result := database.GetDB().First(&user, "id = ?", id)
-	if result.Error != nil {
-		respondWithError(w, http.StatusNotFound, "Utilisateur non trouvé")
-		return
-	}
-
-	userID := r.Context().Value(middleware.UserIDKey).(string)
-	if userID != user.ID {
-		userRole, _ := r.Context().Value(middleware.UserRoleKey).(string)
-		if userRole != string(models.RoleAdmin) {
-			respondWithError(w, http.StatusForbidden, "Vous n'êtes pas autorisé à supprimer cet utilisateur")
-			return
-		}
-	}
-
-	result = database.GetDB().Delete(&user)
-	if result.Error != nil {
-		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la suppression de l'utilisateur")
-		return
-	}
-
-	respondWithJSON(w, http.StatusOK, map[string]string{"message": "Utilisateur supprimé avec succès"})
-}

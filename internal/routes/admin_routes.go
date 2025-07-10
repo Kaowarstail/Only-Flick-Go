@@ -24,10 +24,16 @@ func RegisterAdminRoutes(router *mux.Router) {
 
 	// Gestion des utilisateurs
 	admin.HandleFunc("/users", handlers.GetAdminUsers).Methods("GET", "OPTIONS")
-	admin.HandleFunc("/users/{id}/role", handlers.UpdateUserRole).Methods("PUT", "OPTIONS")
-	admin.HandleFunc("/users/{id}/ban", handlers.BanUser).Methods("PUT", "OPTIONS")
-	admin.HandleFunc("/users/{id}/unban", handlers.UnbanUser).Methods("PUT", "OPTIONS")
+	admin.HandleFunc("/users/role", handlers.UpdateUserRole).Methods("PUT", "OPTIONS")
+	admin.HandleFunc("/users/status", handlers.UpdateUserStatus).Methods("PUT", "OPTIONS")
+	admin.HandleFunc("/users/{id}", handlers.DeleteUser).Methods("DELETE", "OPTIONS")
+	admin.HandleFunc("/users/{id}", handlers.GetUserDetails).Methods("GET", "OPTIONS")
 
 	// Gestion des contenus
 	admin.HandleFunc("/contents", handlers.GetAdminContents).Methods("GET", "OPTIONS")
+	admin.HandleFunc("/contents/{id}", handlers.GetAdminContentDetails).Methods("GET", "OPTIONS")
+	admin.HandleFunc("/contents/{id}", handlers.UpdateAdminContent).Methods("PUT", "OPTIONS")
+	admin.HandleFunc("/contents/{id}", handlers.DeleteAdminContent).Methods("DELETE", "OPTIONS")
+	admin.HandleFunc("/contents/status", handlers.UpdateContentStatus).Methods("PUT", "OPTIONS")
+	admin.HandleFunc("/contents/{id}/flag", handlers.FlagContent).Methods("PUT", "OPTIONS")
 }
