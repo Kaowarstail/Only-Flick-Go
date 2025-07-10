@@ -11,13 +11,14 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
@@ -27,29 +28,71 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/onlyflick-api:latest
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/onlyflick-api:latest
+            ${{ secrets.DOCKER_USERNAME }}/onlyflick-api:${{ github.sha }}
 
       - name: Setup SSH to VPS
         uses: webfactory/ssh-agent@v0.5.4
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Deploy on VPS
+      - name: Deploy on VPS with Kubernetes
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
-            cd /opt/onlyflick
-
-            echo " Pull de la dernière image Docker..."
+            set -e
+            
+            echo "🚀 Déploiement de OnlyFlick API sur Kubernetes..."
+            
+            # Pull de la nouvelle image Docker
+            echo "📥 Pull de la dernière image Docker..."
             docker pull ${{ secrets.DOCKER_USERNAME }}/onlyflick-api:latest
+            
+            # Import de l'image dans k3s
+            echo "📦 Import de l'image dans k3s..."
+            docker save ${{ secrets.DOCKER_USERNAME }}/onlyflick-api:latest | sudo k3s ctr images import -
+            
+            # Mise à jour du déploiement Kubernetes avec la nouvelle image
+            echo "🔄 Mise à jour du déploiement Kubernetes..."
+            sudo k3s kubectl set image deployment/onlyflick onlyflick=${{ secrets.DOCKER_USERNAME }}/onlyflick-api:latest
+            
+            # Attendre que le rollout soit terminé
+            echo "⏳ Attente du rollout..."
+            sudo k3s kubectl rollout status deployment/onlyflick --timeout=300s
+            
+            # Vérifier que les pods sont bien running
+            echo "✅ Vérification des pods..."
+            sudo k3s kubectl get pods -l app=onlyflick
+            
+            # Health check
+            echo "🔍 Health check..."
+            sleep 10
+            SERVICE_PORT=$(sudo k3s kubectl get service onlyflick-service -o jsonpath='{.spec.ports[0].nodePort}')
+            curl -f http://localhost:$SERVICE_PORT/health || echo "⚠️ Health check failed"
+            
+            # Cleanup des anciennes images Docker
+            echo "🧹 Nettoyage des anciennes images..."
+            docker image prune -f
+            
+            echo "🎉 Déploiement terminé avec succès!"
+          EOF
 
-            echo " Stop + suppression de l'ancien container..."
-            docker stop onlyflick || true
-            docker rm onlyflick || true
-
-            echo " Lancement du nouveau container..."
-            docker run -d \
-              --name onlyflick \
-              -p 8080:8080 \
-              --env-file .env \
-              ${{ secrets.DOCKER_USERNAME }}/onlyflick-api:latest
+  rollback:
+    runs-on: ubuntu-latest
+    if: failure() && github.ref == 'refs/heads/main'
+    needs: build-and-deploy
+    
+    steps:
+      - name: Setup SSH to VPS
+        uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          
+      - name: Rollback deployment
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+            echo "🔄 Rollback vers la version précédente..."
+            sudo k3s kubectl rollout undo deployment/onlyflick
+            sudo k3s kubectl rollout status deployment/onlyflick --timeout=300s
+            echo "✅ Rollback terminé"
           EOF
