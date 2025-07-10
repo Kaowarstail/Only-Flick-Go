@@ -23,7 +23,7 @@ func RegisterRoutes(router *mux.Router) {
 
 	// Middleware CORS pour les routes API aussi (sécurité)
 	apiV1.Use(middleware.CORS)
-	
+
 	// Middleware global pour la journalisation
 	apiV1.Use(middleware.Logger)
 
@@ -32,7 +32,6 @@ func RegisterRoutes(router *mux.Router) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	}).Methods("GET", "OPTIONS")
-
 	// Enregistrement des différentes catégories de routes
 	RegisterAuthRoutes(apiV1)
 	RegisterUserRoutes(apiV1)
@@ -40,6 +39,7 @@ func RegisterRoutes(router *mux.Router) {
 	RegisterContentRoutes(apiV1)
 	RegisterSubscriptionRoutes(apiV1)
 	RegisterCommunicationRoutes(apiV1)
+	RegisterMessagingRoutes(apiV1) // Nouveau système de messagerie avec messages payants
 	RegisterModerationRoutes(apiV1)
 	RegisterPaymentRoutes(apiV1)
 }

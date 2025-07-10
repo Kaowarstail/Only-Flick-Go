@@ -52,7 +52,6 @@ func Initialize() error {
 	}
 
 	log.Println("Connected to database successfully")
-
 	// Migration automatique des schémas
 	log.Println("Running database migrations...")
 	err = DB.AutoMigrate(
@@ -71,6 +70,12 @@ func Initialize() error {
 	)
 	if err != nil {
 		return fmt.Errorf("failed to run migrations: %w", err)
+	}
+
+	// Migrations pour le système de messagerie avancé
+	log.Println("Running messaging system migrations...")
+	if err := RunMessagingMigrations(DB); err != nil {
+		return fmt.Errorf("failed to run messaging migrations: %w", err)
 	}
 
 	log.Println("Database migrations completed successfully")
