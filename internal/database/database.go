@@ -28,7 +28,7 @@ func Initialize() error {
 	var err error
 
 	// Vérifier si on utilise SQLite en développement
-	if os.Getenv("DB_TYPE") == "sqlite" || cfg.Database.Host == "" {
+	if os.Getenv("DB_TYPE") == "sqlite" && os.Getenv("ENV") != "production" {
 		// Utiliser SQLite pour le développement
 		dbPath := "dev_database.db"
 		log.Println("Using SQLite database:", dbPath)
@@ -51,29 +51,33 @@ func Initialize() error {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	log.Println("Connected to database successfully")
+	log.Println("✅ Connexion à la base de données réussie")
 
-	// Migration automatique des schémas
-	log.Println("Running database migrations...")
-	err = DB.AutoMigrate(
-		&models.User{},
-		&models.CreatorProfile{},
-		&models.Content{},
-		&models.SubscriptionPlan{},
-		&models.Subscription{},
-		&models.Comment{},
-		&models.Like{},
-		&models.Report{},
-		&models.Message{},
-		&models.Notification{},
-		&models.Transaction{},
-		&models.Payout{},
-	)
-	if err != nil {
-		return fmt.Errorf("failed to run migrations: %w", err)
+	// Seulement faire les migrations si pas en production
+	if os.Getenv("ENV") != "production" {
+		log.Println("Running database migrations...")
+		err = DB.AutoMigrate(
+			&models.User{},
+			&models.CreatorProfile{},
+			&models.Content{},
+			&models.SubscriptionPlan{},
+			&models.Subscription{},
+			&models.Comment{},
+			&models.Like{},
+			&models.Report{},
+			&models.Message{},
+			&models.Notification{},
+			&models.Transaction{},
+			&models.Payout{},
+		)
+		if err != nil {
+			return fmt.Errorf("failed to run migrations: %w", err)
+		}
+		log.Println("Database migrations completed successfully")
+	} else {
+		log.Println("🚀 Production mode: skipping migrations (tables already exist)")
 	}
 
-	log.Println("Database migrations completed successfully")
 	return nil
 }
 
