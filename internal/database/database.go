@@ -12,6 +12,7 @@ import (
 
 	"github.com/Kaowarstail/Only-Flick-Go/config"
 	"github.com/Kaowarstail/Only-Flick-Go/models"
+	_ "modernc.org/sqlite"
 )
 
 var DB *gorm.DB
@@ -32,7 +33,10 @@ func Initialize() error {
 		// Utiliser SQLite pour le développement
 		dbPath := "dev_database.db"
 		log.Println("Using SQLite database:", dbPath)
-		DB, err = gorm.Open(sqlite.Open(dbPath), gormConfig)
+		DB, err = gorm.Open(sqlite.Dialector{
+			DriverName: "sqlite",
+			DSN:        dbPath,
+		}, gormConfig)
 	} else {
 		// Utiliser PostgreSQL pour la production
 		dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",

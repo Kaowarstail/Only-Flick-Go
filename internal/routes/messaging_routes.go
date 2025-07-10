@@ -9,38 +9,30 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// RegisterMessagingRoutes enregistre toutes les routes de messagerie
+// RegisterMessagingRoutes enregistre toutes les routes de messagerie classique
 func RegisterMessagingRoutes(router *mux.Router) {
 	// Créer les handlers
 	conversationHandler := handlers.NewConversationHandler(database.GetDB())
 	messageHandler := handlers.NewMessageHandler(database.GetDB())
 
-	// Routes pour les conversations (toutes protégées)
+	// Routes pour les conversations classiques (toutes protégées)
 	router.Handle("/conversations", middleware.JWTAuth(http.HandlerFunc(conversationHandler.GetUserConversations))).Methods("GET", "OPTIONS")
 	router.Handle("/conversations", middleware.JWTAuth(http.HandlerFunc(conversationHandler.CreateConversation))).Methods("POST", "OPTIONS")
 	router.Handle("/conversations/{id}/messages", middleware.JWTAuth(http.HandlerFunc(conversationHandler.GetConversationMessages))).Methods("GET", "OPTIONS")
 	router.Handle("/conversations/{id}/read", middleware.JWTAuth(http.HandlerFunc(conversationHandler.MarkConversationAsRead))).Methods("PUT", "OPTIONS")
 
-	// Routes pour les messages (toutes protégées avec rate limiting)
+	// Routes pour les messages classiques (avec rate limiting)
 	router.Handle("/messages/{id}", middleware.JWTAuth(http.HandlerFunc(messageHandler.GetMessage))).Methods("GET", "OPTIONS")
 
-	// Message normal avec rate limiting
+	// Envoi de message classique avec rate limiting
 	router.Handle("/messages",
 		middleware.JWTAuth(
 			middleware.MessageRateLimit()(
-				http.HandlerFunc(messageHandler.SendMessage),
+				http.HandlerFunc(messageHandler.SendMessageClassic),
 			),
 		),
 	).Methods("POST", "OPTIONS")
 
-	// Message payant avec rate limiting plus strict
-	router.Handle("/messages/paid",
-		middleware.JWTAuth(
-			middleware.PaidMessageRateLimit()(
-				http.HandlerFunc(messageHandler.SendPaidMessage),
-			),
-		),
-	).Methods("POST", "OPTIONS")
-
-	router.Handle("/messages/{id}/unlock", middleware.JWTAuth(http.HandlerFunc(messageHandler.UnlockPaidMessage))).Methods("POST", "OPTIONS")
+	// Marquer les messages comme lus
+	router.Handle("/messages/read", middleware.JWTAuth(http.HandlerFunc(messageHandler.MarkAsRead))).Methods("PUT", "OPTIONS")
 }
