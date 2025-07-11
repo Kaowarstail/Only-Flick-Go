@@ -17,7 +17,7 @@ scrape_configs:
 
   - job_name: 'onlyflick-api'
     static_configs:
-      - targets: ['api.yourdomain.com:8080']  # Remplacer par votre domaine
+      - targets: ['api.yourdomain.com:32143']  # Remplacer par votre domaine
     scrape_interval: 10s
     metrics_path: '/metrics'
     scrape_timeout: 5s
