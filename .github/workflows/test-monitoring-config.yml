@@ -1,4 +1,4 @@
-name: Test Monitoring Simple
+name: Test Monitoring Configuration
 
 on:
   pull_request:
@@ -8,6 +8,13 @@ on:
       - 'docker-compose.monitoring.yml'
       - 'docker-compose.monitoring.prod.yml'
       - 'test_monitoring.sh'
+      - 'test_monitoring_config.sh'
+  push:
+    branches: [ main ]
+    paths:
+      - 'monitoring/**'
+      - 'docker-compose.monitoring.yml'
+      - 'docker-compose.monitoring.prod.yml'
   workflow_dispatch:
 
 jobs:
@@ -18,6 +25,16 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y jq yamllint
     
     - name: Test Docker Compose files
       run: |
@@ -41,7 +58,10 @@ jobs:
         # Vérifier la syntaxe avec la nouvelle syntaxe Docker Compose
         echo "Validation de la syntaxe Docker Compose..."
         docker compose -f docker-compose.monitoring.yml config > /dev/null
-        echo "✅ Configuration Docker Compose valide"
+        echo "✅ Configuration Docker Compose dev valide"
+        
+        docker compose -f docker-compose.monitoring.prod.yml config > /dev/null
+        echo "✅ Configuration Docker Compose prod valide"
     
     - name: Test Prometheus configuration
       run: |
@@ -52,7 +72,11 @@ jobs:
           exit 1
         fi
         
-        # Test avec promtool
+        # Vérifier la syntaxe YAML
+        yamllint -d relaxed monitoring/prometheus/prometheus.yml
+        echo "✅ YAML Prometheus valide"
+        
+        # Test avec promtool via Docker
         docker run --rm -v $(pwd)/monitoring/prometheus:/etc/prometheus \
           --entrypoint promtool \
           prom/prometheus:latest \
@@ -69,7 +93,11 @@ jobs:
           exit 1
         fi
         
-        # Test avec amtool
+        # Vérifier la syntaxe YAML
+        yamllint -d relaxed monitoring/alertmanager/alertmanager.yml
+        echo "✅ YAML Alertmanager valide"
+        
+        # Test avec amtool via Docker
         docker run --rm -v $(pwd)/monitoring/alertmanager:/etc/alertmanager \
           --entrypoint amtool \
           prom/alertmanager:latest \
@@ -89,7 +117,7 @@ jobs:
             # Vérifier que c'est un JSON valide
             if jq . "$dashboard" > /dev/null 2>&1; then
               echo "✅ Dashboard valide: $dashboard"
-              ((dashboard_count++))
+              dashboard_count=$((dashboard_count + 1))
             else
               echo "❌ Dashboard JSON invalide: $dashboard"
               exit 1
@@ -97,20 +125,26 @@ jobs:
           fi
         done
         
-        echo "✅ $dashboard_count dashboards validés"
+        if [ $dashboard_count -eq 0 ]; then
+          echo "⚠️ Aucun dashboard trouvé"
+        else
+          echo "✅ $dashboard_count dashboards validés"
+        fi
     
     - name: Test scripts
       run: |
         echo "📝 Test des scripts..."
         
         # Vérifier que les scripts existent
-        scripts=("test_monitoring.sh" "start_monitoring.sh" "validate_secrets.sh")
+        scripts=("test_monitoring.sh" "start_monitoring.sh" "validate_secrets.sh" "test_monitoring_config.sh")
         
         for script in "${scripts[@]}"; do
           if [ -f "$script" ]; then
             echo "✅ Script trouvé: $script"
             # Rendre exécutable
             chmod +x "$script"
+            # Vérifier la syntaxe bash
+            bash -n "$script" && echo "✅ Syntaxe bash valide: $script"
           else
             echo "⚠️ Script manquant: $script"
           fi
@@ -142,6 +176,11 @@ jobs:
           exit 1
         fi
     
+    - name: Test monitoring configuration (quick)
+      run: |
+        echo "🏃 Test rapide des configurations..."
+        ./test_monitoring_config.sh
+    
     - name: Generate test report
       if: always()
       run: |
@@ -154,7 +193,7 @@ jobs:
         - **Date**: $(date)
         - **Commit**: ${{ github.sha }}
         - **Branch**: ${{ github.ref }}
-        - **Workflow**: Test Configuration Simple
+        - **Workflow**: Test Configuration
         - **Status**: ${{ job.status }}
         
         ## Tests réalisés
@@ -165,6 +204,7 @@ jobs:
         ✅ Dashboards Grafana validés
         ✅ Scripts vérifiés
         ✅ Template d'environnement vérifié
+        ✅ Test de configuration rapide exécuté
         
         ## Résultat
         ${{ job.status == 'success' && 'Tous les tests de configuration ont réussi ✅' || 'Certains tests ont échoué ❌' }}
@@ -178,7 +218,7 @@ jobs:
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: test-report-simple-${{ github.run_number }}
+        name: test-report-${{ github.run_number }}
         path: test_report.md
         retention-days: 7
         if-no-files-found: ignore
@@ -199,6 +239,7 @@ jobs:
           echo "- Dashboards Grafana: ✅ Valides"
           echo "- Scripts: ✅ Vérifiés"
           echo "- Template d'environnement: ✅ Sécurisé"
+          echo "- Test de configuration rapide: ✅ Réussi"
         else
           echo "❌ Échec des tests de configuration"
           echo "Veuillez vérifier les logs et corriger les erreurs."
