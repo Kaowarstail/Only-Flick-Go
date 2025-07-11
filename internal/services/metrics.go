@@ -32,6 +32,13 @@ var (
 		},
 	)
 
+	TotalUsers = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "users_total",
+			Help: "Total number of users in the system",
+		},
+	)
+
 	UsersRegistered = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "users_registered_total",
@@ -47,6 +54,13 @@ var (
 			Help: "Total number of content items created",
 		},
 		[]string{"type", "creator_id"},
+	)
+
+	TotalContent = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "content_total",
+			Help: "Total number of content items in the system",
+		},
 	)
 
 	ContentViews = promauto.NewCounterVec(
@@ -221,4 +235,14 @@ func UpdateActiveSubscriptions(count float64) {
 // UpdateDatabaseConnections met à jour le nombre de connexions DB actives
 func UpdateDatabaseConnections(count float64) {
 	DatabaseConnections.Set(count)
+}
+
+// UpdateTotalUsers met à jour le nombre total d'utilisateurs
+func UpdateTotalUsers(count float64) {
+	TotalUsers.Set(count)
+}
+
+// UpdateTotalContent met à jour le nombre total de contenus
+func UpdateTotalContent(count float64) {
+	TotalContent.Set(count)
 }
