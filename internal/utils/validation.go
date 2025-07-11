@@ -1,11 +1,12 @@
 package utils
 
 import (
-	"crypto/rand"
-	"fmt"
 	"regexp"
 	"strings"
+	"time"
 	"unicode"
+
+	"github.com/google/uuid"
 )
 
 // ValidateEmail valide le format d'un email
@@ -110,19 +111,44 @@ func SanitizeInput(input string) string {
 	return input
 }
 
-// GenerateUUID génère un UUID simple pour les noms de fichiers
-func GenerateUUID() (string, error) {
-	bytes := make([]byte, 16)
-	_, err := rand.Read(bytes)
-	if err != nil {
-		return "", err
+// ValidateUUID vérifie si une string est un UUID valide
+func ValidateUUID(uuidStr string) bool {
+	_, err := uuid.Parse(uuidStr)
+	return err == nil
+}
+
+// GenerateUUID génère un UUID v4
+func GenerateUUID() string {
+	return uuid.New().String()
+}
+
+// TimeNow retourne le temps actuel UTC
+func TimeNow() time.Time {
+	return time.Now().UTC()
+}
+
+// ContainsIgnoreCase vérifie si une string contient une autre (insensible à la casse)
+func ContainsIgnoreCase(s, substr string) bool {
+	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
+}
+
+// IsValidURL vérifie si une string est une URL valide
+func IsValidURL(urlStr string) bool {
+	if urlStr == "" {
+		return false
 	}
 
-	// Définir les bits de version (4 bits pour la version 4)
-	bytes[6] = (bytes[6] & 0x0f) | 0x40
+	// Simple validation pour URL
+	return strings.HasPrefix(urlStr, "http://") || strings.HasPrefix(urlStr, "https://")
+}
 
-	// Définir les bits de variante (2 bits pour la variante RFC 4122)
-	bytes[8] = (bytes[8] & 0x3f) | 0x80
+// SanitizeMessageContent nettoie le contenu d'un message
+func SanitizeMessageContent(content string) string {
+	// Supprimer les espaces en début et fin
+	content = strings.TrimSpace(content)
 
-	return fmt.Sprintf("%x-%x-%x-%x-%x", bytes[0:4], bytes[4:6], bytes[6:8], bytes[8:10], bytes[10:]), nil
+	// Supprimer les caractères de contrôle mais garder les retours à la ligne
+	content = regexp.MustCompile(`[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]`).ReplaceAllString(content, "")
+
+	return content
 }
