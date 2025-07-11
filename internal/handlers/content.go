@@ -100,7 +100,7 @@ func CreateContentWithMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("✅ [CreateContentWithMedia] Contenu créé avec ID: %s\n", content.ID)
+	fmt.Printf("✅ [CreateContentWithMedia] Contenu créé avec ID: %d\n", content.ID)
 
 	// 2. Récupérer le fichier média
 	file, handler, err := r.FormFile("media")
@@ -1194,7 +1194,7 @@ func UploadContentImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("✅ [UploadContentImage] Contenu créé avec ID: %s\n", content.ID)
+	fmt.Printf("✅ [UploadContentImage] Contenu créé avec ID: %d\n", content.ID)
 
 	// Initialiser le service Cloudinary
 	fmt.Println("🔧 [UploadContentImage] Initialisation du service Cloudinary")
