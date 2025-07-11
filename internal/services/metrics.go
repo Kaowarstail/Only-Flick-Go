@@ -147,6 +147,39 @@ var (
 		},
 	)
 
+	// Métriques de contenu supplémentaires
+	ContentByType = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "content_by_type_total",
+			Help: "Total number of content items by type",
+		},
+		[]string{"type"},
+	)
+
+	TotalContentViews = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "content_total_views",
+			Help: "Total number of content views across all content",
+		},
+	)
+
+	// Métriques utilisateurs supplémentaires
+	UsersByRole = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "users_by_role_total",
+			Help: "Total number of users by role",
+		},
+		[]string{"role"},
+	)
+
+	// Métriques de revenus
+	TotalRevenue = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "total_revenue_euros",
+			Help: "Total revenue in euros from active subscriptions",
+		},
+	)
+
 	// Métriques d'erreur
 	ErrorsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
@@ -208,6 +241,16 @@ func RecordError(errorType, severity string) {
 	ErrorsTotal.WithLabelValues(errorType, severity).Inc()
 }
 
+// RecordComment enregistre un nouveau commentaire
+func RecordComment() {
+	CommentsCreated.Inc()
+}
+
+// RecordLike enregistre un nouveau like
+func RecordLike() {
+	LikesCreated.Inc()
+}
+
 // UpdateActiveUsers met à jour le nombre d'utilisateurs actifs
 func UpdateActiveUsers(count float64) {
 	ActiveUsers.Set(count)
@@ -221,4 +264,26 @@ func UpdateActiveSubscriptions(count float64) {
 // UpdateDatabaseConnections met à jour le nombre de connexions DB actives
 func UpdateDatabaseConnections(count float64) {
 	DatabaseConnections.Set(count)
+}
+
+// Nouvelles fonctions pour les métriques business
+
+// UpdateContentByType met à jour le nombre de contenus par type
+func UpdateContentByType(contentType string, count float64) {
+	ContentByType.WithLabelValues(contentType).Set(count)
+}
+
+// UpdateTotalContentViews met à jour le total des vues de contenu
+func UpdateTotalContentViews(count float64) {
+	TotalContentViews.Set(count)
+}
+
+// UpdateUsersByRole met à jour le nombre d'utilisateurs par rôle
+func UpdateUsersByRole(role string, count float64) {
+	UsersByRole.WithLabelValues(role).Set(count)
+}
+
+// UpdateTotalRevenue met à jour les revenus totaux
+func UpdateTotalRevenue(amount float64) {
+	TotalRevenue.Set(amount)
 }

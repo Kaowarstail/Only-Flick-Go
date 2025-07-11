@@ -32,6 +32,7 @@ type User struct {
 	BannedAt        *time.Time `json:"banned_at"`
 	IsEmailVerified bool       `json:"is_email_verified" gorm:"default:false"`
 	LastLogin       *time.Time `json:"last_login"`
+	LastActiveAt    *time.Time `json:"last_active_at"` // Pour le tracking des utilisateurs actifs
 	CreatedAt       time.Time  `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt       time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
 
