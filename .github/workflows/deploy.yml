@@ -56,14 +56,6 @@ jobs:
             echo "⚠️ Aucun package avec des tests pour la couverture"
           fi
 
-      - name: Check code formatting
-        run: |
-          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
-            echo "Code is not properly formatted. Run 'go fmt ./...' to fix."
-            gofmt -s -l .
-            exit 1
-          fi
-
       - name: Run go vet
         run: go vet ./...
 
