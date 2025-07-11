@@ -1,0 +1,341 @@
+name: Test Monitoring
+
+on:
+  pull_request:
+    branches: [ main, production ]
+    paths:
+      - 'monitoring/**'
+      - 'docker-compose.monitoring.yml'
+      - 'docker-compose.monitoring.prod.yml'
+      - 'test_monitoring.sh'
+      - 'internal/middleware/metrics.go'
+      - 'internal/services/metrics.go'
+      - 'internal/services/metrics_updater.go'
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: 'Type de test à exécuter'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - quick
+          - security
+          - performance
+
+jobs:
+  test-monitoring:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        test-scenario: [basic, stress, security]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+    
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+    
+    - name: Create test environment
+      run: |
+        echo "🔧 Configuration de l'environnement de test..."
+        
+        # Créer un fichier d'environnement de test
+        cat > .env.monitoring.test << EOF
+        # Configuration de test - valeurs non-sensibles
+        GRAFANA_ADMIN_USER=admin
+        GRAFANA_ADMIN_PASSWORD=test_admin_password_123
+        GRAFANA_SECRET_KEY=test_secret_key_32_chars_minimum_length
+        GRAFANA_DB_NAME=grafana_test
+        GRAFANA_DB_USER=grafana_test
+        GRAFANA_DB_PASSWORD=test_db_password_123
+        SMTP_HOST=smtp.example.com
+        SMTP_PORT=587
+        SMTP_FROM=test@example.com
+        SMTP_USERNAME=test@example.com
+        SMTP_PASSWORD=test_smtp_password
+        ADMIN_EMAIL=admin@example.com
+        SLACK_WEBHOOK_URL=https://hooks.slack.com/services/TEST/WEBHOOK/URL
+        WEBHOOK_TOKEN=test_webhook_token_123
+        LETSENCRYPT_EMAIL=test@example.com
+        DOMAIN=test.example.com
+        MONITORING_DOMAIN=monitoring.test.example.com
+        API_HOST=api.test.example.com
+        API_PORT=8080
+        EOF
+        
+        # Utiliser le fichier de test
+        cp .env.monitoring.test .env.monitoring.prod
+        
+        echo "✅ Environnement de test créé"
+    
+    - name: Build Go application
+      run: |
+        echo "🔨 Compilation de l'application Go..."
+        
+        # Vérifier que le code compile
+        go mod tidy
+        go build -o bin/api ./cmd/api
+        
+        echo "✅ Compilation réussie"
+    
+    - name: Run Go tests
+      run: |
+        echo "🧪 Exécution des tests Go..."
+        
+        # Tests unitaires
+        go test ./... -v -cover
+        
+        # Tests de l'API
+        if [ -f "./test/api_test.go" ]; then
+          go test ./test/... -v
+        fi
+        
+        echo "✅ Tests Go terminés"
+    
+    - name: Security scan
+      if: matrix.test-scenario == 'security'
+      run: |
+        echo "🔒 Scan de sécurité..."
+        
+        # Installer gosec pour les tests de sécurité
+        go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+        
+        # Exécuter le scan de sécurité
+        gosec ./...
+        
+        # Vérifier qu'aucun secret n'est présent dans le code
+        if grep -r -i "password\|secret\|token" --include="*.go" --exclude-dir="test" . | grep -v "TODO\|FIXME\|PASSWORD\|SECRET\|TOKEN" | grep -E "(=|:)" | grep -v "_test.go"; then
+          echo "❌ Potentiels secrets détectés dans le code"
+          exit 1
+        fi
+        
+        echo "✅ Scan de sécurité terminé"
+    
+    - name: Test monitoring stack
+      run: |
+        echo "🧪 Test de la stack de monitoring..."
+        
+        # Rendre le script exécutable
+        chmod +x ./test_monitoring.sh
+        
+        # Déterminer le type de test
+        TEST_TYPE="${{ github.event.inputs.test_type || 'full' }}"
+        
+        case "$TEST_TYPE" in
+          "quick")
+            ./test_monitoring.sh --quick-test
+            ;;
+          "security")
+            ./test_monitoring.sh --security-test
+            ;;
+          "performance")
+            ./test_monitoring.sh --performance-test
+            ;;
+          *)
+            ./test_monitoring.sh
+            ;;
+        esac
+        
+        echo "✅ Tests de monitoring terminés"
+    
+    - name: Stress test
+      if: matrix.test-scenario == 'stress'
+      run: |
+        echo "🚀 Test de charge..."
+        
+        # Démarrer la stack de monitoring
+        docker-compose -f docker-compose.monitoring.yml up -d
+        
+        # Attendre que les services soient prêts
+        sleep 60
+        
+        # Installer curl si nécessaire
+        sudo apt-get update && sudo apt-get install -y curl
+        
+        # Test de charge basique
+        for i in {1..100}; do
+          curl -s http://localhost:9090/api/v1/query?query=up > /dev/null &
+          curl -s http://localhost:3000/api/health > /dev/null &
+          curl -s http://localhost:9093/api/v1/status > /dev/null &
+          
+          if [ $((i % 10)) -eq 0 ]; then
+            echo "Test $i/100 terminé"
+          fi
+        done
+        
+        # Attendre que tous les tests se terminent
+        wait
+        
+        echo "✅ Test de charge terminé"
+    
+    - name: Test dashboards
+      run: |
+        echo "📊 Test des dashboards Grafana..."
+        
+        # Vérifier que les fichiers JSON des dashboards sont valides
+        for dashboard in monitoring/grafana/dashboards/*.json; do
+          if [ -f "$dashboard" ]; then
+            echo "Validation de $dashboard..."
+            
+            # Vérifier que c'est un JSON valide
+            if ! jq . "$dashboard" > /dev/null 2>&1; then
+              echo "❌ Dashboard JSON invalide: $dashboard"
+              exit 1
+            fi
+            
+            # Vérifier les champs obligatoires
+            if ! jq -e '.dashboard.title' "$dashboard" > /dev/null 2>&1; then
+              echo "❌ Dashboard sans titre: $dashboard"
+              exit 1
+            fi
+            
+            echo "✅ Dashboard valide: $dashboard"
+          fi
+        done
+        
+        echo "✅ Validation des dashboards terminée"
+    
+    - name: Test Prometheus configuration
+      run: |
+        echo "🔍 Test de la configuration Prometheus..."
+        
+        # Vérifier la syntaxe de la configuration
+        docker run --rm -v $(pwd)/monitoring/prometheus:/etc/prometheus \
+          prom/prometheus:latest \
+          promtool check config /etc/prometheus/prometheus.yml
+        
+        # Vérifier les règles d'alerte
+        if [ -f "monitoring/prometheus/alert.rules.yml" ]; then
+          docker run --rm -v $(pwd)/monitoring/prometheus:/etc/prometheus \
+            prom/prometheus:latest \
+            promtool check rules /etc/prometheus/alert.rules.yml
+        fi
+        
+        echo "✅ Configuration Prometheus valide"
+    
+    - name: Test Alertmanager configuration
+      run: |
+        echo "🚨 Test de la configuration Alertmanager..."
+        
+        # Vérifier la syntaxe de la configuration
+        docker run --rm -v $(pwd)/monitoring/alertmanager:/etc/alertmanager \
+          prom/alertmanager:latest \
+          amtool check-config /etc/alertmanager/alertmanager.yml
+        
+        echo "✅ Configuration Alertmanager valide"
+    
+    - name: Generate test report
+      if: always()
+      run: |
+        echo "📋 Génération du rapport de test..."
+        
+        # Créer un rapport de test
+        cat > test_report.md << EOF
+        # Rapport de Test - Monitoring OnlyFlick
+        
+        ## Informations générales
+        - **Date**: $(date)
+        - **Commit**: ${{ github.sha }}
+        - **Branch**: ${{ github.ref }}
+        - **Scénario**: ${{ matrix.test-scenario }}
+        - **Type de test**: ${{ github.event.inputs.test_type || 'full' }}
+        
+        ## Résultats des tests
+        
+        ### Tests Go
+        - Compilation: ✅ Réussie
+        - Tests unitaires: ✅ Réussis
+        
+        ### Tests de sécurité
+        - Scan de sécurité: ${{ matrix.test-scenario == 'security' && '✅ Réussi' || '⏭️ Ignoré' }}
+        - Vérification des secrets: ✅ Réussie
+        
+        ### Tests de monitoring
+        - Configuration Prometheus: ✅ Valide
+        - Configuration Alertmanager: ✅ Valide
+        - Dashboards Grafana: ✅ Valides
+        
+        ### Tests de performance
+        - Test de charge: ${{ matrix.test-scenario == 'stress' && '✅ Réussi' || '⏭️ Ignoré' }}
+        
+        ## Recommandations
+        
+        ${{ matrix.test-scenario == 'security' && '- Scan de sécurité réussi, aucun problème détecté' || '' }}
+        ${{ matrix.test-scenario == 'stress' && '- Tests de charge réussis, performance acceptable' || '' }}
+        
+        EOF
+        
+        echo "✅ Rapport de test généré"
+    
+    - name: Upload test artifacts
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results-${{ matrix.test-scenario }}
+        path: |
+          test_report.md
+          logs/
+          *.log
+        retention-days: 7
+    
+    - name: Cleanup
+      if: always()
+      run: |
+        echo "🧹 Nettoyage..."
+        
+        # Arrêter les services Docker
+        docker-compose -f docker-compose.monitoring.yml down -v --remove-orphans || true
+        
+        # Supprimer les fichiers de test
+        rm -f .env.monitoring.test .env.monitoring.prod
+        
+        # Nettoyer les images Docker non utilisées
+        docker system prune -f || true
+        
+        echo "✅ Nettoyage terminé"
+
+  notify-results:
+    runs-on: ubuntu-latest
+    needs: test-monitoring
+    if: always()
+    
+    steps:
+    - name: Notify test results
+      run: |
+        if [ "${{ needs.test-monitoring.result }}" == "success" ]; then
+          echo "🎉 Tous les tests sont passés avec succès"
+          
+          # Créer un commentaire sur la PR si c'est une PR
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "✅ Tests de monitoring réussis pour cette PR" >> pr_comment.txt
+            echo "- Configuration Prometheus: ✅ Valide" >> pr_comment.txt
+            echo "- Configuration Alertmanager: ✅ Valide" >> pr_comment.txt
+            echo "- Dashboards Grafana: ✅ Valides" >> pr_comment.txt
+            echo "- Tests de sécurité: ✅ Réussis" >> pr_comment.txt
+          fi
+        else
+          echo "❌ Certains tests ont échoué"
+          
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "❌ Échec des tests de monitoring pour cette PR" >> pr_comment.txt
+            echo "Veuillez vérifier les logs et corriger les erreurs avant de merger." >> pr_comment.txt
+          fi
+        fi

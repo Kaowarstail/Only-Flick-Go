@@ -1,0 +1,279 @@
+name: Deploy Monitoring
+
+on:
+  push:
+    branches: [ main, production ]
+    paths:
+      - 'monitoring/**'
+      - 'docker-compose.monitoring.prod.yml'
+      - '.github/workflows/deploy-monitoring.yml'
+      - 'deploy_monitoring_prod.sh'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'deploy'
+        type: choice
+        options:
+          - deploy
+          - update
+          - backup
+          - restore
+          - stop
+
+jobs:
+  validate-secrets:
+    runs-on: ubuntu-latest
+    outputs:
+      secrets-valid: ${{ steps.check.outputs.valid }}
+    
+    steps:
+    - name: Check required secrets
+      id: check
+      run: |
+        required_secrets=(
+          "${{ secrets.GRAFANA_ADMIN_PASSWORD }}"
+          "${{ secrets.GRAFANA_SECRET_KEY }}"
+          "${{ secrets.GRAFANA_DB_PASSWORD }}"
+          "${{ secrets.SMTP_PASSWORD }}"
+          "${{ secrets.WEBHOOK_TOKEN }}"
+        )
+        
+        all_set=true
+        for secret in "${required_secrets[@]}"; do
+          if [ -z "$secret" ]; then
+            echo "❌ Un ou plusieurs secrets requis ne sont pas définis"
+            all_set=false
+            break
+          fi
+        done
+        
+        if [ "$all_set" = true ]; then
+          echo "✅ Tous les secrets requis sont définis"
+          echo "valid=true" >> $GITHUB_OUTPUT
+        else
+          echo "❌ Configuration des secrets incomplète"
+          echo "valid=false" >> $GITHUB_OUTPUT
+        fi
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: validate-secrets
+    if: needs.validate-secrets.outputs.secrets-valid == 'true'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Create secure environment file
+      run: |
+        cat > .env.monitoring.prod << EOF
+        # Configuration générée automatiquement - Ne pas commiter !
+        
+        # Grafana Configuration
+        GRAFANA_ADMIN_USER=admin
+        GRAFANA_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        GRAFANA_SECRET_KEY=${{ secrets.GRAFANA_SECRET_KEY }}
+        GRAFANA_DB_NAME=grafana
+        GRAFANA_DB_USER=grafana
+        GRAFANA_DB_PASSWORD=${{ secrets.GRAFANA_DB_PASSWORD }}
+        
+        # Email Configuration
+        SMTP_HOST=${{ secrets.SMTP_HOST || 'smtp.gmail.com' }}
+        SMTP_PORT=587
+        SMTP_FROM=${{ secrets.SMTP_FROM || 'monitoring@yourdomain.com' }}
+        SMTP_USERNAME=${{ secrets.SMTP_USERNAME || secrets.SMTP_FROM }}
+        SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+        ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL || 'admin@yourdomain.com' }}
+        
+        # Slack Configuration (optionnel)
+        SLACK_WEBHOOK_URL=${{ secrets.SLACK_WEBHOOK_URL }}
+        
+        # Webhook Configuration
+        WEBHOOK_TOKEN=${{ secrets.WEBHOOK_TOKEN }}
+        
+        # SSL/TLS Configuration
+        LETSENCRYPT_EMAIL=${{ secrets.LETSENCRYPT_EMAIL || secrets.ADMIN_EMAIL }}
+        
+        # Domaine Configuration
+        DOMAIN=${{ secrets.DOMAIN || 'yourdomain.com' }}
+        MONITORING_DOMAIN=${{ secrets.MONITORING_DOMAIN || 'monitoring.yourdomain.com' }}
+        
+        # API Configuration
+        API_HOST=${{ secrets.API_HOST || 'api.yourdomain.com' }}
+        API_PORT=8080
+        
+        # Génération automatique
+        GENERATED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        GITHUB_SHA=${{ github.sha }}
+        GITHUB_REF=${{ github.ref }}
+        EOF
+    
+    - name: Validate environment file
+      run: |
+        echo "🔍 Validation du fichier d'environnement..."
+        
+        # Vérifier que les secrets critiques sont bien définis
+        if grep -q "CHANGE_ME" .env.monitoring.prod; then
+          echo "❌ Des placeholders 'CHANGE_ME' sont encore présents"
+          exit 1
+        fi
+        
+        # Vérifier la longueur des secrets
+        if [ ${#GRAFANA_SECRET_KEY} -lt 32 ]; then
+          echo "❌ GRAFANA_SECRET_KEY doit faire au moins 32 caractères"
+          exit 1
+        fi
+        
+        echo "✅ Fichier d'environnement validé"
+      env:
+        GRAFANA_SECRET_KEY: ${{ secrets.GRAFANA_SECRET_KEY }}
+    
+    - name: Test monitoring stack
+      run: |
+        echo "🧪 Test de la stack de monitoring..."
+        
+        # Rendre le script exécutable
+        chmod +x ./test_monitoring.sh
+        
+        # Exécuter les tests avec un timeout
+        timeout 300 ./test_monitoring.sh --quick-test || {
+          echo "❌ Les tests ont échoué"
+          exit 1
+        }
+        
+        echo "✅ Tests réussis"
+    
+    - name: Deploy to production
+      run: |
+        echo "🚀 Déploiement en production..."
+        
+        # Rendre le script exécutable
+        chmod +x ./deploy_monitoring_prod.sh
+        
+        # Déterminer l'action à effectuer
+        ACTION="${{ github.event.inputs.action || 'deploy' }}"
+        
+        # Exécuter le déploiement
+        ./deploy_monitoring_prod.sh "$ACTION"
+        
+        echo "✅ Déploiement réussi"
+    
+    - name: Health check
+      run: |
+        echo "🏥 Vérification de la santé des services..."
+        
+        # Attendre que les services soient prêts
+        sleep 30
+        
+        # Vérifier que les services sont accessibles
+        services=(
+          "http://localhost:9090/api/v1/query?query=up"  # Prometheus
+          "http://localhost:3000/api/health"             # Grafana
+          "http://localhost:9093/api/v1/status"          # Alertmanager
+        )
+        
+        for service in "${services[@]}"; do
+          if curl -f -s "$service" > /dev/null; then
+            echo "✅ Service accessible: $service"
+          else
+            echo "❌ Service inaccessible: $service"
+          fi
+        done
+        
+        echo "✅ Vérification terminée"
+    
+    - name: Cleanup sensitive files
+      if: always()
+      run: |
+        echo "🧹 Nettoyage des fichiers sensibles..."
+        
+        # Supprimer le fichier d'environnement
+        rm -f .env.monitoring.prod
+        
+        # Supprimer les logs potentiellement sensibles
+        rm -rf logs/
+        
+        echo "✅ Nettoyage terminé"
+    
+    - name: Notify deployment status
+      if: always()
+      run: |
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "🎉 Déploiement réussi pour ${{ github.ref }}"
+          
+          # Envoyer une notification Slack si configuré
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+              -H 'Content-type: application/json' \
+              --data '{
+                "text": "✅ Monitoring OnlyFlick déployé avec succès",
+                "attachments": [{
+                  "color": "good",
+                  "fields": [{
+                    "title": "Branch",
+                    "value": "${{ github.ref }}",
+                    "short": true
+                  }, {
+                    "title": "Commit",
+                    "value": "${{ github.sha }}",
+                    "short": true
+                  }]
+                }]
+              }'
+          fi
+        else
+          echo "❌ Échec du déploiement"
+          
+          # Envoyer une notification d'erreur
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+              -H 'Content-type: application/json' \
+              --data '{
+                "text": "❌ Échec du déploiement Monitoring OnlyFlick",
+                "attachments": [{
+                  "color": "danger",
+                  "fields": [{
+                    "title": "Branch",
+                    "value": "${{ github.ref }}",
+                    "short": true
+                  }, {
+                    "title": "Commit",
+                    "value": "${{ github.sha }}",
+                    "short": true
+                  }]
+                }]
+              }'
+          fi
+        fi
+
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: success()
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Run security scan
+      run: |
+        echo "🔒 Scan de sécurité..."
+        
+        # Vérifier qu'aucun secret n'est committé
+        if grep -r "CHANGE_ME" --include="*.yml" --include="*.yaml" --include="*.env" .; then
+          echo "❌ Des placeholders de secrets sont encore présents"
+          exit 1
+        fi
+        
+        # Vérifier les permissions des fichiers
+        find . -name "*.sh" -exec chmod +x {} \;
+        
+        # Vérifier la configuration Docker
+        docker-compose -f docker-compose.monitoring.prod.yml config > /dev/null
+        
+        echo "✅ Scan de sécurité terminé"

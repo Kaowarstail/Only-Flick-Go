@@ -33,8 +33,20 @@ logs/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.secure
+.env.backup
 config.local.json
 config.json
+
+# Fichiers de secrets et sécurité
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+.secrets/
+*.secret
+docker-secrets/
 
 # Base de données SQLite
 *.db
@@ -57,3 +69,62 @@ coverage.txt
 *.cover
 *.coverprofile.env
 .env
+
+# ================================
+# MONITORING - FICHIERS SENSIBLES
+# ================================
+# Ne jamais commiter ces fichiers avec de vraies valeurs !
+
+# Fichiers d'environnement générés automatiquement
+.env.generated
+.env.monitoring.local
+.env.monitoring.dev
+.env.monitoring.staging
+.env.monitoring.test
+.env.monitoring.backup
+
+# Fichiers de secrets Docker
+docker-secrets/
+.docker-secrets/
+
+# Fichiers temporaires de monitoring
+monitoring_backups/
+monitoring/data/
+monitoring/logs/
+monitoring/grafana/data/
+monitoring/prometheus/data/
+monitoring/alertmanager/data/
+
+# Certificats SSL/TLS
+*.crt
+*.key
+*.pem
+*.p12
+*.pfx
+certs/
+ssl/
+
+# Fichiers de backup sensibles
+*.sql.gz
+*.backup
+backup_*.tar.gz
+restore_*.sql
+
+# Fichiers de configuration avec secrets
+alertmanager.local.yml
+prometheus.local.yml
+grafana.local.ini
+
+# Logs et traces
+*.trace
+monitoring/*.log
+*.debug
+
+# Fichiers de test avec données sensibles
+test_secrets.sh
+test_*.env
+*_test_secrets_*
+
+# Fichiers temporaires GitHub Actions
+.github_env
+github_secrets_*
