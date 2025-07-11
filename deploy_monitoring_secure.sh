@@ -187,8 +187,8 @@ check_prerequisites() {
     fi
     
     # Vérifier Docker Compose
-    if ! command -v docker-compose &> /dev/null; then
-        log_error "Docker Compose n'est pas installé"
+    if ! docker compose version &> /dev/null; then
+        log_error "Docker Compose n'est pas disponible"
         return 1
     fi
     
@@ -205,7 +205,7 @@ check_prerequisites() {
     fi
     
     # Vérifier la configuration des services
-    if ! docker-compose -f "$COMPOSE_FILE" config &> /dev/null; then
+    if ! docker compose -f "$COMPOSE_FILE" config &> /dev/null; then
         log_error "Configuration Docker Compose invalide"
         return 1
     fi
@@ -288,7 +288,7 @@ deploy_services() {
     fi
     
     # Déployer avec Docker Compose
-    docker-compose -f "$COMPOSE_FILE" --env-file "$env_file" up -d
+    docker compose -f "$COMPOSE_FILE" --env-file "$env_file" up -d
     
     local result=$?
     
@@ -333,7 +333,7 @@ check_services_health() {
         fi
         
         # Vérifier que tous les services sont prêts
-        if docker-compose -f "$COMPOSE_FILE" ps | grep -q "Up"; then
+        if docker compose -f "$COMPOSE_FILE" ps | grep -q "Up"; then
             log_success "Tous les services sont démarrés"
             sleep 10
             return 0
@@ -456,8 +456,8 @@ deploy() {
     echo "- Alertmanager: http://localhost:9093"
     echo ""
     echo "🔧 Commandes utiles:"
-    echo "- Voir les logs: docker-compose -f $COMPOSE_FILE logs -f"
-    echo "- Arrêter les services: docker-compose -f $COMPOSE_FILE down"
+    echo "- Voir les logs: docker compose -f $COMPOSE_FILE logs -f"
+    echo "- Arrêter les services: docker compose -f $COMPOSE_FILE down"
     echo "- Redémarrer: ./deploy_monitoring_secure.sh update"
     echo ""
     
@@ -483,7 +483,7 @@ stop() {
     log_info "🛑 Arrêt du monitoring OnlyFlick"
     
     # Arrêter les services
-    docker-compose -f "$COMPOSE_FILE" down
+    docker compose -f "$COMPOSE_FILE" down
     
     # Nettoyer les fichiers sensibles
     cleanup_sensitive_files

@@ -192,7 +192,7 @@ jobs:
         echo "🚀 Test de charge..."
         
         # Démarrer la stack de monitoring avec timeout
-        timeout 300s docker-compose -f docker-compose.monitoring.yml up -d || {
+        timeout 300s docker compose -f docker-compose.monitoring.yml up -d || {
           echo "⚠️ Impossible de démarrer la stack, test ignoré"
           exit 0
         }
@@ -354,7 +354,7 @@ jobs:
         echo "🧹 Nettoyage..."
         
         # Arrêter les services Docker si ils sont en cours
-        docker-compose -f docker-compose.monitoring.yml down --remove-orphans 2>/dev/null || true
+        docker compose -f docker-compose.monitoring.yml down --remove-orphans 2>/dev/null || true
         
         # Supprimer les fichiers de test temporaires
         rm -f .env.monitoring.test .env.monitoring.prod 2>/dev/null || true

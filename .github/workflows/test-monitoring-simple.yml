@@ -38,8 +38,9 @@ jobs:
           exit 1
         fi
         
-        # Vérifier la syntaxe
-        docker-compose -f docker-compose.monitoring.yml config > /dev/null
+        # Vérifier la syntaxe avec la nouvelle syntaxe Docker Compose
+        echo "Validation de la syntaxe Docker Compose..."
+        docker compose -f docker-compose.monitoring.yml config > /dev/null
         echo "✅ Configuration Docker Compose valide"
     
     - name: Test Prometheus configuration

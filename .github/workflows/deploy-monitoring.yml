@@ -274,6 +274,6 @@ jobs:
         find . -name "*.sh" -exec chmod +x {} \;
         
         # Vérifier la configuration Docker
-        docker-compose -f docker-compose.monitoring.prod.yml config > /dev/null
+        docker compose -f docker-compose.monitoring.prod.yml config > /dev/null
         
         echo "✅ Scan de sécurité terminé"

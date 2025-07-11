@@ -40,8 +40,8 @@ check_docker() {
         exit 1
     fi
     
-    if ! command -v docker-compose &> /dev/null; then
-        log_error "Docker Compose n'est pas installé. Veuillez installer Docker Compose."
+    if ! docker compose version &> /dev/null; then
+        log_error "Docker Compose n'est pas disponible. Veuillez installer Docker Compose."
         exit 1
     fi
 }
@@ -64,14 +64,14 @@ start_monitoring() {
     mkdir -p monitoring/alertmanager
     
     # Démarrer les services
-    docker-compose -f $COMPOSE_FILE -p $PROJECT_NAME up -d
+    docker compose -f $COMPOSE_FILE -p $PROJECT_NAME up -d
     
     # Attendre que les services soient prêts
     log_info "Attente du démarrage des services..."
     sleep 10
     
     # Vérifier le statut des services
-    if docker-compose -f $COMPOSE_FILE -p $PROJECT_NAME ps | grep -q "Up"; then
+    if docker compose -f $COMPOSE_FILE -p $PROJECT_NAME ps | grep -q "Up"; then
         log_success "Services de monitoring démarrés avec succès!"
         show_access_info
     else
@@ -83,7 +83,7 @@ start_monitoring() {
 # Arrêter les services de monitoring
 stop_monitoring() {
     log_info "Arrêt du monitoring OnlyFlick..."
-    docker-compose -f $COMPOSE_FILE -p $PROJECT_NAME down
+    docker compose -f $COMPOSE_FILE -p $PROJECT_NAME down
     log_success "Services de monitoring arrêtés."
 }
 
@@ -98,7 +98,7 @@ restart_monitoring() {
 # Afficher le statut des services
 show_status() {
     log_info "Statut des services de monitoring:"
-    docker-compose -f $COMPOSE_FILE -p $PROJECT_NAME ps
+    docker compose -f $COMPOSE_FILE -p $PROJECT_NAME ps
 }
 
 # Afficher les informations d'accès
@@ -132,7 +132,7 @@ show_access_info() {
 # Afficher les logs
 show_logs() {
     log_info "Logs des services de monitoring:"
-    docker-compose -f $COMPOSE_FILE -p $PROJECT_NAME logs -f
+    docker compose -f $COMPOSE_FILE -p $PROJECT_NAME logs -f
 }
 
 # Nettoyer les volumes (attention: supprime les données)
@@ -142,7 +142,7 @@ cleanup() {
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         log_info "Nettoyage en cours..."
-        docker-compose -f $COMPOSE_FILE -p $PROJECT_NAME down -v
+        docker compose -f $COMPOSE_FILE -p $PROJECT_NAME down -v
         docker volume prune -f
         log_success "Nettoyage terminé."
     else
