@@ -289,6 +289,9 @@ func (s *MessagingService) GetMessagingStats(userID string) (*dto.MessageStatsRe
 			userID, userID, userID).
 		Count(&unreadMessages)
 
+	stats.TotalMessages = int(totalMessages)
+	stats.MediaMessages = int(mediaMessages)
+	stats.TextMessages = int(textMessages)
 	stats.UnreadMessages = int(unreadMessages)
 
 	return stats, nil
