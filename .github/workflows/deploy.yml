@@ -1,4 +1,4 @@
-name: CI/CD – Build & Deploy OnlyFlick API
+name: CI/CD – Build, Test & Deploy OnlyFlick API
 
 on:
   push:
@@ -8,10 +8,69 @@ on:
     branches:
       - main
 
+env:
+  GO_VERSION: '1.21'
+
 jobs:
-  build-and-deploy:
+  # Job 1: Tests et validation
+  test:
+    name: Run Tests
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: Check if tests exist
+        run: |
+          if [ $(find . -name "*_test.go" -type f | wc -l) -eq 0 ]; then
+            echo "❌ Aucun fichier de test trouvé! Ajoutez des tests avant de déployer."
+            exit 1
+          fi
+          echo "✅ $(find . -name "*_test.go" -type f | wc -l) fichier(s) de test trouvé(s)"
+
+      - name: Run tests
+        run: |
+          # Utiliser notre script personnalisé qui ne teste que les packages avec des tests
+          ./run_tests.sh
+          
+      - name: Run tests with coverage
+        run: |
+          # Trouver tous les packages avec des fichiers de test pour la couverture
+          TEST_PACKAGES=$(find . -name "*_test.go" -type f | xargs -I {} dirname {} | sort -u | xargs -I {} go list {})
+          if [ -n "$TEST_PACKAGES" ]; then
+            echo "$TEST_PACKAGES" | xargs go test -v -race -buildvcs -coverprofile=coverage.out
+          else
+            echo "⚠️ Aucun package avec des tests pour la couverture"
+          fi
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run staticcheck (if available)
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          staticcheck ./...
+        continue-on-error: true
+
+  # Job 2: Build et déploiement (seulement si tests passent)
+  build-and-deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
       - name: Checkout code
@@ -31,6 +90,8 @@ jobs:
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/onlyflick-api:latest
             ${{ secrets.DOCKER_USERNAME }}/onlyflick-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Setup SSH to VPS
         uses: webfactory/ssh-agent@v0.5.4
@@ -52,6 +113,10 @@ jobs:
             echo "📦 Import de l'image dans k3s..."
             docker save ${{ secrets.DOCKER_USERNAME }}/onlyflick-api:latest | sudo k3s ctr images import -
             
+            # Sauvegarder l'état actuel pour rollback éventuel
+            echo "💾 Sauvegarde de l'état actuel..."
+            sudo k3s kubectl annotate deployment onlyflick deployment.kubernetes.io/last-applied-configuration-backup="$(date)"
+            
             # Mise à jour du déploiement Kubernetes avec la nouvelle image
             echo "🔄 Mise à jour du déploiement Kubernetes..."
             sudo k3s kubectl set image deployment/onlyflick onlyflick=${{ secrets.DOCKER_USERNAME }}/onlyflick-api:latest
@@ -64,11 +129,28 @@ jobs:
             echo "✅ Vérification des pods..."
             sudo k3s kubectl get pods -l app=onlyflick
             
-            # Health check
-            echo "🔍 Health check..."
-            sleep 10
+            # Health check post-déploiement
+            echo "🔍 Health check post-déploiement..."
+            sleep 15
             SERVICE_PORT=$(sudo k3s kubectl get service onlyflick-service -o jsonpath='{.spec.ports[0].nodePort}')
-            curl -f http://localhost:$SERVICE_PORT/health || echo "⚠️ Health check failed"
+            
+            # Retry logic pour le health check
+            for i in {1..5}; do
+              if curl -f http://localhost:$SERVICE_PORT/health; then
+                echo "✅ Health check réussi!"
+                break
+              else
+                echo "⚠️ Health check échoué, tentative $i/5..."
+                sleep 10
+              fi
+              
+              if [ $i -eq 5 ]; then
+                echo "❌ Health check échoué après 5 tentatives, rollback automatique..."
+                sudo k3s kubectl rollout undo deployment/onlyflick
+                sudo k3s kubectl rollout status deployment/onlyflick --timeout=300s
+                exit 1
+              fi
+            done
             
             # Cleanup des anciennes images Docker
             echo "🧹 Nettoyage des anciennes images..."
@@ -77,22 +159,12 @@ jobs:
             echo "🎉 Déploiement terminé avec succès!"
           EOF
 
-  rollback:
-    runs-on: ubuntu-latest
-    if: failure() && github.ref == 'refs/heads/main'
-    needs: build-and-deploy
-    
-    steps:
-      - name: Setup SSH to VPS
-        uses: webfactory/ssh-agent@v0.5.4
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-          
-      - name: Rollback deployment
+      - name: Notify deployment success
+        if: success()
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
-            echo "🔄 Rollback vers la version précédente..."
-            sudo k3s kubectl rollout undo deployment/onlyflick
-            sudo k3s kubectl rollout status deployment/onlyflick --timeout=300s
-            echo "✅ Rollback terminé"
-          EOF
+          echo "✅ Déploiement réussi! Application accessible sur http://${{ secrets.VPS_HOST }}:PORT"
+
+      - name: Notify deployment failure
+        if: failure()
+        run: |
+          echo "❌ Déploiement échoué! Rollback automatique effectué."
