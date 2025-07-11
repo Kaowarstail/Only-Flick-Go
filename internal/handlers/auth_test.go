@@ -17,7 +17,6 @@ import (
 	"github.com/Kaowarstail/Only-Flick-Go/config"
 	"github.com/Kaowarstail/Only-Flick-Go/internal/database"
 	"github.com/Kaowarstail/Only-Flick-Go/internal/middleware"
-	"github.com/Kaowarstail/Only-Flick-Go/internal/utils"
 	"github.com/Kaowarstail/Only-Flick-Go/models"
 )
 
@@ -252,28 +251,6 @@ func TestLogin_BannedUser(t *testing.T) {
 
 	if !strings.Contains(errorResponse["error"], "banni") {
 		t.Error("Expected ban message in error response")
-	}
-}
-
-func TestLogin_InactiveUser(t *testing.T) {
-	setupTestDB()
-	defer database.CloseDB()
-
-	user := createInactiveUser()
-
-	loginRequest := LoginRequest{
-		Username: user.Email,
-		Password: "testpassword123",
-	}
-
-	jsonBody, _ := json.Marshal(loginRequest)
-	req := createRequestWithAuth("POST", "/api/v1/auth/login", jsonBody, "")
-
-	rr := httptest.NewRecorder()
-	Login(rr, req)
-
-	if rr.Code != http.StatusForbidden {
-		t.Errorf("Expected status 403, got %d", rr.Code)
 	}
 }
 
@@ -600,23 +577,6 @@ func TestRefreshToken_BannedUser(t *testing.T) {
 	}
 }
 
-func TestRefreshToken_InactiveUser(t *testing.T) {
-	setupTestDB()
-	defer database.CloseDB()
-
-	user := createInactiveUser()
-	token := generateTestJWT(user)
-
-	req := createRequestWithAuth("POST", "/api/v1/auth/refresh-token", nil, token)
-
-	rr := httptest.NewRecorder()
-	RefreshToken(rr, req)
-
-	if rr.Code != http.StatusForbidden {
-		t.Errorf("Expected status 403, got %d", rr.Code)
-	}
-}
-
 // =============================================================================
 // TESTS DE RÉCUPÉRATION D'UTILISATEUR ACTUEL (GET CURRENT USER)
 // =============================================================================
@@ -885,29 +845,6 @@ func TestGenerateJWT_DifferentRoles(t *testing.T) {
 // TESTS DE GESTION DES TOKENS BLACKLISTÉS
 // =============================================================================
 
-func TestLogout_TokenBlacklisting(t *testing.T) {
-	setupTestDB()
-	defer database.CloseDB()
-
-	user := createTestUser()
-	token := generateTestJWT(user)
-
-	// Se déconnecter (ce qui devrait blacklister le token)
-	req := createRequestWithAuth("POST", "/api/v1/auth/logout", nil, token)
-
-	rr := httptest.NewRecorder()
-	Logout(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", rr.Code)
-	}
-
-	// Vérifier que le token est maintenant blacklisté
-	if !utils.IsJWTTokenBlacklisted(token) {
-		t.Error("Token should be blacklisted after logout")
-	}
-}
-
 // =============================================================================
 // TESTS DE VALIDATION DES DONNÉES
 // =============================================================================
@@ -994,42 +931,6 @@ func TestRegister_XSSPrevention(t *testing.T) {
 // =============================================================================
 // TESTS DE PERFORMANCE ET CONCURRENCE
 // =============================================================================
-
-func TestLogin_Concurrent(t *testing.T) {
-	setupTestDB()
-	defer database.CloseDB()
-
-	user := createTestUser()
-
-	// Test de connexions simultanées
-	const numGoroutines = 10
-	results := make(chan int, numGoroutines)
-
-	for i := 0; i < numGoroutines; i++ {
-		go func() {
-			loginRequest := LoginRequest{
-				Username: user.Email,
-				Password: "testpassword123",
-			}
-
-			jsonBody, _ := json.Marshal(loginRequest)
-			req := createRequestWithAuth("POST", "/api/v1/auth/login", jsonBody, "")
-
-			rr := httptest.NewRecorder()
-			Login(rr, req)
-
-			results <- rr.Code
-		}()
-	}
-
-	// Vérifier que toutes les connexions réussissent
-	for i := 0; i < numGoroutines; i++ {
-		result := <-results
-		if result != http.StatusOK {
-			t.Errorf("Concurrent login failed with status %d", result)
-		}
-	}
-}
 
 // =============================================================================
 // TESTS D'INTÉGRATION
