@@ -1,0 +1,246 @@
+name: Test Monitoring Configuration
+
+on:
+  pull_request:
+    branches: [ main, production ]
+    paths:
+      - 'monitoring/**'
+      - 'docker-compose.monitoring.yml'
+      - 'docker-compose.monitoring.prod.yml'
+      - 'test_monitoring.sh'
+      - 'test_monitoring_config.sh'
+  push:
+    branches: [ main ]
+    paths:
+      - 'monitoring/**'
+      - 'docker-compose.monitoring.yml'
+      - 'docker-compose.monitoring.prod.yml'
+  workflow_dispatch:
+
+jobs:
+  test-config:
+    runs-on: ubuntu-latest
+    name: Test Configuration
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y jq yamllint
+    
+    - name: Test Docker Compose files
+      run: |
+        echo "🔍 Test des fichiers Docker Compose..."
+        
+        # Vérifier que les fichiers existent
+        if [ -f "docker-compose.monitoring.yml" ]; then
+          echo "✅ docker-compose.monitoring.yml trouvé"
+        else
+          echo "❌ docker-compose.monitoring.yml manquant"
+          exit 1
+        fi
+        
+        if [ -f "docker-compose.monitoring.prod.yml" ]; then
+          echo "✅ docker-compose.monitoring.prod.yml trouvé"
+        else
+          echo "❌ docker-compose.monitoring.prod.yml manquant"
+          exit 1
+        fi
+        
+        # Vérifier la syntaxe avec la nouvelle syntaxe Docker Compose
+        echo "Validation de la syntaxe Docker Compose..."
+        docker compose -f docker-compose.monitoring.yml config > /dev/null
+        echo "✅ Configuration Docker Compose dev valide"
+        
+        docker compose -f docker-compose.monitoring.prod.yml config > /dev/null
+        echo "✅ Configuration Docker Compose prod valide"
+    
+    - name: Test Prometheus configuration
+      run: |
+        echo "🔍 Test de la configuration Prometheus..."
+        
+        if [ ! -f "monitoring/prometheus/prometheus.yml" ]; then
+          echo "❌ Fichier prometheus.yml manquant"
+          exit 1
+        fi
+        
+        # Vérifier la syntaxe YAML
+        yamllint -d relaxed monitoring/prometheus/prometheus.yml
+        echo "✅ YAML Prometheus valide"
+        
+        # Test avec promtool via Docker
+        docker run --rm -v $(pwd)/monitoring/prometheus:/etc/prometheus \
+          --entrypoint promtool \
+          prom/prometheus:latest \
+          check config /etc/prometheus/prometheus.yml
+        
+        echo "✅ Configuration Prometheus valide"
+    
+    - name: Test Alertmanager configuration
+      run: |
+        echo "🚨 Test de la configuration Alertmanager..."
+        
+        if [ ! -f "monitoring/alertmanager/alertmanager.yml" ]; then
+          echo "❌ Fichier alertmanager.yml manquant"
+          exit 1
+        fi
+        
+        # Vérifier la syntaxe YAML
+        yamllint -d relaxed monitoring/alertmanager/alertmanager.yml
+        echo "✅ YAML Alertmanager valide"
+        
+        # Test avec amtool via Docker
+        docker run --rm -v $(pwd)/monitoring/alertmanager:/etc/alertmanager \
+          --entrypoint amtool \
+          prom/alertmanager:latest \
+          check-config /etc/alertmanager/alertmanager.yml
+        
+        echo "✅ Configuration Alertmanager valide"
+    
+    - name: Test Grafana dashboards
+      run: |
+        echo "📊 Test des dashboards Grafana..."
+        
+        dashboard_count=0
+        for dashboard in monitoring/grafana/dashboards/*.json; do
+          if [ -f "$dashboard" ]; then
+            echo "Validation de $dashboard..."
+            
+            # Vérifier que c'est un JSON valide
+            if jq . "$dashboard" > /dev/null 2>&1; then
+              echo "✅ Dashboard valide: $dashboard"
+              dashboard_count=$((dashboard_count + 1))
+            else
+              echo "❌ Dashboard JSON invalide: $dashboard"
+              exit 1
+            fi
+          fi
+        done
+        
+        if [ $dashboard_count -eq 0 ]; then
+          echo "⚠️ Aucun dashboard trouvé"
+        else
+          echo "✅ $dashboard_count dashboards validés"
+        fi
+    
+    - name: Test scripts
+      run: |
+        echo "📝 Test des scripts..."
+        
+        # Vérifier que les scripts existent
+        scripts=("test_monitoring.sh" "start_monitoring.sh" "validate_secrets.sh" "test_monitoring_config.sh")
+        
+        for script in "${scripts[@]}"; do
+          if [ -f "$script" ]; then
+            echo "✅ Script trouvé: $script"
+            # Rendre exécutable
+            chmod +x "$script"
+            # Vérifier la syntaxe bash
+            bash -n "$script" && echo "✅ Syntaxe bash valide: $script"
+          else
+            echo "⚠️ Script manquant: $script"
+          fi
+        done
+        
+        echo "✅ Scripts vérifiés"
+    
+    - name: Test environment template
+      run: |
+        echo "🔧 Test du template d'environnement..."
+        
+        if [ -f ".env.monitoring.prod" ]; then
+          echo "✅ Template d'environnement trouvé"
+          
+          # Vérifier qu'il n'y a pas de secrets en clair
+          if grep -q "CHANGE_ME" .env.monitoring.prod; then
+            echo "⚠️ Placeholders CHANGE_ME détectés (normal pour un template)"
+          fi
+          
+          # Vérifier qu'il n'y a pas de vrais secrets
+          if grep -E "(password|secret|token).*[a-zA-Z0-9]{16,}" .env.monitoring.prod | grep -v "{{" | grep -v "CHANGE_ME"; then
+            echo "❌ Potentiels secrets détectés dans le template"
+            exit 1
+          fi
+          
+          echo "✅ Template d'environnement sécurisé"
+        else
+          echo "❌ Template d'environnement manquant"
+          exit 1
+        fi
+    
+    - name: Test monitoring configuration (quick)
+      run: |
+        echo "🏃 Test rapide des configurations..."
+        ./test_monitoring_config.sh
+    
+    - name: Generate test report
+      if: always()
+      run: |
+        echo "📋 Génération du rapport de test..."
+        
+        cat > test_report.md << EOF
+        # Rapport de Test - Monitoring OnlyFlick
+        
+        ## Informations générales
+        - **Date**: $(date)
+        - **Commit**: ${{ github.sha }}
+        - **Branch**: ${{ github.ref }}
+        - **Workflow**: Test Configuration
+        - **Status**: ${{ job.status }}
+        
+        ## Tests réalisés
+        
+        ✅ Fichiers Docker Compose validés
+        ✅ Configuration Prometheus validée
+        ✅ Configuration Alertmanager validée
+        ✅ Dashboards Grafana validés
+        ✅ Scripts vérifiés
+        ✅ Template d'environnement vérifié
+        ✅ Test de configuration rapide exécuté
+        
+        ## Résultat
+        ${{ job.status == 'success' && 'Tous les tests de configuration ont réussi ✅' || 'Certains tests ont échoué ❌' }}
+        
+        EOF
+        
+        echo "✅ Rapport de test généré"
+        cat test_report.md
+    
+    - name: Upload test report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-report-${{ github.run_number }}
+        path: test_report.md
+        retention-days: 7
+        if-no-files-found: ignore
+
+  notify-results:
+    runs-on: ubuntu-latest
+    needs: test-config
+    if: always()
+    
+    steps:
+    - name: Comment PR
+      if: github.event_name == 'pull_request'
+      run: |
+        if [ "${{ needs.test-config.result }}" == "success" ]; then
+          echo "✅ Tests de configuration du monitoring réussis"
+          echo "- Configuration Prometheus: ✅ Valide"
+          echo "- Configuration Alertmanager: ✅ Valide"
+          echo "- Dashboards Grafana: ✅ Valides"
+          echo "- Scripts: ✅ Vérifiés"
+          echo "- Template d'environnement: ✅ Sécurisé"
+          echo "- Test de configuration rapide: ✅ Réussi"
+        else
+          echo "❌ Échec des tests de configuration"
+          echo "Veuillez vérifier les logs et corriger les erreurs."
+        fi

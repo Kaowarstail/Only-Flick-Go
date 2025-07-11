@@ -8,9 +8,12 @@ import (
 
 	"github.com/Kaowarstail/Only-Flick-Go/config"
 	"github.com/Kaowarstail/Only-Flick-Go/internal/database"
+	"github.com/Kaowarstail/Only-Flick-Go/internal/middleware"
 	"github.com/Kaowarstail/Only-Flick-Go/internal/routes"
+	"github.com/Kaowarstail/Only-Flick-Go/internal/services"
 	"github.com/Kaowarstail/Only-Flick-Go/seed"
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	_ "github.com/joho/godotenv/autoload"
 )
 
@@ -39,11 +42,21 @@ func main() {
 		seed.Run()
 	}
 
+	// 📊 Initialiser la mise à jour des métriques
+	services.InitMetricsUpdater()
+	log.Println("📊 Mise à jour des métriques démarrée ✅")
+
 	// Setup du routeur
 	router := mux.NewRouter()
 
+	// Middleware de métriques (doit être ajouté avant les routes)
+	router.Use(middleware.MetricsMiddleware)
+
 	// Endpoint de santé
 	router.HandleFunc("/health", healthHandler).Methods("GET")
+
+	// Endpoint de métriques Prometheus
+	router.Handle("/metrics", promhttp.Handler()).Methods("GET")
 
 	// Enregistrer les autres routes
 	routes.RegisterRoutes(router)

@@ -1,0 +1,62 @@
+groups:
+  - name: onlyflick.rules
+    rules:
+      # Alerte si l'API est down
+      - alert: OnlyFlickAPIDown
+        expr: up{job="onlyflick-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "OnlyFlick API is down"
+          description: "OnlyFlick API has been down for more than 1 minute."
+
+      # Alerte si le temps de réponse est trop élevé
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High response time on OnlyFlick API"
+          description: "95th percentile response time is above 1 second for more than 2 minutes."
+
+      # Alerte si le taux d'erreur est élevé
+      - alert: HighErrorRate
+        expr: (rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m])) > 0.1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate on OnlyFlick API"
+          description: "Error rate is above 10% for more than 1 minute."
+
+      # Alerte si l'utilisation mémoire est élevée
+      - alert: HighMemoryUsage
+        expr: (go_memstats_heap_inuse_bytes / go_memstats_heap_sys_bytes) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on OnlyFlick API"
+          description: "Memory usage is above 80% for more than 5 minutes."
+
+      # Alerte si le nombre de goroutines est élevé
+      - alert: HighGoroutineCount
+        expr: go_goroutines > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High goroutine count on OnlyFlick API"
+          description: "Number of goroutines is above 1000 for more than 5 minutes."
+
+      # Alerte si le taux de succès des uploads est faible
+      - alert: LowUploadSuccessRate
+        expr: (rate(cloudinary_upload_success_total[5m]) / rate(cloudinary_upload_attempts_total[5m])) < 0.95
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low upload success rate"
+          description: "Upload success rate is below 95% for more than 2 minutes."
