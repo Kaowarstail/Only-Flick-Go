@@ -36,10 +36,10 @@ jobs:
       - name: Check if tests exist
         run: |
           if [ $(find . -name "*_test.go" -type f | wc -l) -eq 0 ]; then
-            echo "❌ Aucun fichier de test trouvé! Ajoutez des tests avant de déployer."
+            echo "Aucun fichier de test trouvé! Ajoutez des tests avant de déployer."
             exit 1
           fi
-          echo "✅ $(find . -name "*_test.go" -type f | wc -l) fichier(s) de test trouvé(s)"
+          echo "$(find . -name "*_test.go" -type f | wc -l) fichier(s) de test trouvé(s)"
 
       - name: Run tests
         run: |
@@ -53,7 +53,7 @@ jobs:
           if [ -n "$TEST_PACKAGES" ]; then
             echo "$TEST_PACKAGES" | xargs go test -v -race -buildvcs -coverprofile=coverage.out
           else
-            echo "⚠️ Aucun package avec des tests pour la couverture"
+            echo "Aucun package avec des tests pour la couverture"
           fi
 
       - name: Run go vet
@@ -103,49 +103,49 @@ jobs:
           ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
             set -e
             
-            echo "🚀 Déploiement de OnlyFlick API sur Kubernetes..."
+            echo "Déploiement de OnlyFlick API"
             
             # Pull de la nouvelle image Docker
-            echo "📥 Pull de la dernière image Docker..."
+            echo "Pull de la dernière image Docker..."
             docker pull ${{ secrets.DOCKER_USERNAME }}/onlyflick-api:latest
             
             # Import de l'image dans k3s
-            echo "📦 Import de l'image dans k3s..."
+            echo "Import de l'image dans k3s..."
             docker save ${{ secrets.DOCKER_USERNAME }}/onlyflick-api:latest | sudo k3s ctr images import -
             
             # Sauvegarder l'état actuel pour rollback éventuel
-            echo "💾 Sauvegarde de l'état actuel..."
+            echo "Sauvegarde de l'état actuel..."
             sudo k3s kubectl annotate deployment onlyflick deployment.kubernetes.io/last-applied-configuration-backup="$(date)"
             
             # Mise à jour du déploiement Kubernetes avec la nouvelle image
-            echo "🔄 Mise à jour du déploiement Kubernetes..."
+            echo "Mise à jour du déploiement Kubernetes..."
             sudo k3s kubectl set image deployment/onlyflick onlyflick=${{ secrets.DOCKER_USERNAME }}/onlyflick-api:latest
             
             # Attendre que le rollout soit terminé
-            echo "⏳ Attente du rollout..."
+            echo "Attente du rollout..."
             sudo k3s kubectl rollout status deployment/onlyflick --timeout=300s
             
             # Vérifier que les pods sont bien running
-            echo "✅ Vérification des pods..."
+            echo "Vérification des pods..."
             sudo k3s kubectl get pods -l app=onlyflick
             
             # Health check post-déploiement
-            echo "🔍 Health check post-déploiement..."
+            echo "Health check post-déploiement..."
             sleep 15
             SERVICE_PORT=$(sudo k3s kubectl get service onlyflick-service -o jsonpath='{.spec.ports[0].nodePort}')
             
             # Retry logic pour le health check
             for i in {1..5}; do
               if curl -f http://localhost:$SERVICE_PORT/health; then
-                echo "✅ Health check réussi!"
+                echo "Health check réussi!"
                 break
               else
-                echo "⚠️ Health check échoué, tentative $i/5..."
+                echo "Health check échoué, tentative $i/5..."
                 sleep 10
               fi
               
               if [ $i -eq 5 ]; then
-                echo "❌ Health check échoué après 5 tentatives, rollback automatique..."
+                echo "Health check échoué après 5 tentatives, rollback automatique..."
                 sudo k3s kubectl rollout undo deployment/onlyflick
                 sudo k3s kubectl rollout status deployment/onlyflick --timeout=300s
                 exit 1
@@ -156,15 +156,15 @@ jobs:
             echo "🧹 Nettoyage des anciennes images..."
             docker image prune -f
             
-            echo "🎉 Déploiement terminé avec succès!"
+            echo "Déploiement terminé avec succès!"
           EOF
 
       - name: Notify deployment success
         if: success()
         run: |
-          echo "✅ Déploiement réussi! Application accessible sur http://${{ secrets.VPS_HOST }}:PORT"
+          echo "Déploiement réussi! Application accessible sur http://${{ secrets.VPS_HOST }}:PORT"
 
       - name: Notify deployment failure
         if: failure()
         run: |
-          echo "❌ Déploiement échoué! Rollback automatique effectué."
+          echo "Déploiement échoué! Rollback automatique effectué."
