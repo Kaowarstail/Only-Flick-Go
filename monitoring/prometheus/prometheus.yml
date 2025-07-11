@@ -15,7 +15,7 @@ scrape_configs:
   # OnlyFlick API
   - job_name: 'onlyflick-api'
     static_configs:
-      - targets: ['host.docker.internal:32143']
+      - targets: ['onlyflick-service:80']
     metrics_path: '/metrics'
     scrape_interval: 15s
     scrape_timeout: 10s
