@@ -375,9 +375,13 @@ func CreateContent(w http.ResponseWriter, r *http.Request) {
 
 	result = database.GetDB().Create(&content)
 	if result.Error != nil {
+		services.RecordError("database", "error")
 		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la création du contenu")
 		return
 	}
+
+	// Enregistrer la métrique de création de contenu
+	services.RecordContentCreation(content.Type, content.CreatorID)
 
 	// Précharger les relations pour la réponse
 	database.GetDB().Preload("Creator").First(&content, content.ID)
