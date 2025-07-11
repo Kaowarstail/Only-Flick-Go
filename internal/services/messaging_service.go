@@ -268,7 +268,7 @@ func (s *MessagingService) MarkMessagesAsRead(conversationID uint, userID string
 
 	return s.db.Model(&models.Message{}).
 		Where("conversation_id = ? AND sender_id = ? AND read_at IS NULL", conversationID, otherParticipantID).
-		Update("read_at", "NOW()").Error
+		Update("read_at", gorm.Expr("NOW()")).Error
 }
 
 // GetMessagingStats retourne les statistiques de messagerie pour un utilisateur
