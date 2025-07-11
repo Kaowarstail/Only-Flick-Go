@@ -1,0 +1,226 @@
+global:
+  # Configuration SMTP pour la production
+  smtp_smarthost: '${SMTP_HOST}:${SMTP_PORT}'
+  smtp_from: '${SMTP_FROM}'
+  smtp_auth_username: '${SMTP_USERNAME}'
+  smtp_auth_password: '${SMTP_PASSWORD}'
+  smtp_require_tls: true
+  
+  # Configuration Slack
+  slack_api_url: '${SLACK_WEBHOOK_URL}'
+  
+  # Paramètres globaux
+  resolve_timeout: 5m
+  http_config:
+    follow_redirects: true
+
+# Templates pour les notifications
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# Configuration des routes
+route:
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+  receiver: 'default'
+  routes:
+    # Alertes critiques
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 10s
+      repeat_interval: 1h
+    
+    # Alertes de warning
+    - match:
+        severity: warning
+      receiver: 'warning-alerts'
+      group_wait: 30s
+      repeat_interval: 6h
+    
+    # Alertes API
+    - match:
+        job: onlyflick-api
+      receiver: 'api-alerts'
+      group_wait: 20s
+      repeat_interval: 2h
+    
+    # Alertes infrastructure
+    - match:
+        alertname: InstanceDown
+      receiver: 'infrastructure-alerts'
+      group_wait: 10s
+      repeat_interval: 1h
+
+# Configuration des récepteurs
+receivers:
+  - name: 'default'
+    email_configs:
+      - to: '${ADMIN_EMAIL}'
+        subject: '[OnlyFlick] Alert - {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        body: |
+          {{ range .Alerts }}
+          **Alert:** {{ .Annotations.summary }}
+          **Description:** {{ .Annotations.description }}
+          **Severity:** {{ .Labels.severity }}
+          **Instance:** {{ .Labels.instance }}
+          **Time:** {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          {{ end }}
+        headers:
+          Subject: '[OnlyFlick] Alert Notification'
+
+  - name: 'critical-alerts'
+    email_configs:
+      - to: '${ADMIN_EMAIL}'
+        subject: '[OnlyFlick] CRITICAL ALERT - {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        body: |
+          🚨 **CRITICAL ALERT** 🚨
+          
+          {{ range .Alerts }}
+          **Alert:** {{ .Annotations.summary }}
+          **Description:** {{ .Annotations.description }}
+          **Severity:** {{ .Labels.severity }}
+          **Instance:** {{ .Labels.instance }}
+          **Started:** {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          **Labels:** {{ range .Labels.SortedPairs }}{{ .Name }}={{ .Value }} {{ end }}
+          {{ end }}
+          
+          Please take immediate action!
+        headers:
+          Subject: '[OnlyFlick] CRITICAL ALERT'
+          Priority: 'urgent'
+    
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#alerts'
+        username: 'OnlyFlick Monitoring'
+        icon_emoji: ':fire:'
+        title: '🚨 CRITICAL ALERT'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Severity:* {{ .Labels.severity }}
+          *Instance:* {{ .Labels.instance }}
+          *Started:* {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          {{ end }}
+        send_resolved: true
+    
+    webhook_configs:
+      - url: 'https://api.yourdomain.com/alerts/webhook'
+        http_config:
+          bearer_token: '${WEBHOOK_TOKEN}'
+        send_resolved: true
+
+  - name: 'warning-alerts'
+    email_configs:
+      - to: '${ADMIN_EMAIL}'
+        subject: '[OnlyFlick] WARNING - {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        body: |
+          ⚠️ **WARNING ALERT** ⚠️
+          
+          {{ range .Alerts }}
+          **Alert:** {{ .Annotations.summary }}
+          **Description:** {{ .Annotations.description }}
+          **Severity:** {{ .Labels.severity }}
+          **Instance:** {{ .Labels.instance }}
+          **Started:** {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          {{ end }}
+        headers:
+          Subject: '[OnlyFlick] WARNING'
+    
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#monitoring'
+        username: 'OnlyFlick Monitoring'
+        icon_emoji: ':warning:'
+        title: '⚠️ WARNING'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Instance:* {{ .Labels.instance }}
+          {{ end }}
+        send_resolved: true
+
+  - name: 'api-alerts'
+    email_configs:
+      - to: '${ADMIN_EMAIL}'
+        subject: '[OnlyFlick] API Alert - {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        body: |
+          🔥 **API ALERT** 🔥
+          
+          {{ range .Alerts }}
+          **Alert:** {{ .Annotations.summary }}
+          **Description:** {{ .Annotations.description }}
+          **API Endpoint:** {{ .Labels.instance }}
+          **Method:** {{ .Labels.method }}
+          **Status Code:** {{ .Labels.status_code }}
+          **Started:** {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          {{ end }}
+        headers:
+          Subject: '[OnlyFlick] API Alert'
+    
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#api-alerts'
+        username: 'OnlyFlick API Monitor'
+        icon_emoji: ':rotating_light:'
+        title: '🔥 API ALERT'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *API:* {{ .Labels.instance }}
+          *Method:* {{ .Labels.method }}
+          {{ end }}
+        send_resolved: true
+
+  - name: 'infrastructure-alerts'
+    email_configs:
+      - to: '${ADMIN_EMAIL}'
+        subject: '[OnlyFlick] Infrastructure Alert - {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        body: |
+          🏗️ **INFRASTRUCTURE ALERT** 🏗️
+          
+          {{ range .Alerts }}
+          **Alert:** {{ .Annotations.summary }}
+          **Description:** {{ .Annotations.description }}
+          **Server:** {{ .Labels.instance }}
+          **Job:** {{ .Labels.job }}
+          **Started:** {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          {{ end }}
+        headers:
+          Subject: '[OnlyFlick] Infrastructure Alert'
+    
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#infrastructure'
+        username: 'OnlyFlick Infrastructure'
+        icon_emoji: ':building_construction:'
+        title: '🏗️ INFRASTRUCTURE ALERT'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Server:* {{ .Labels.instance }}
+          {{ end }}
+        send_resolved: true
+
+# Inhibition des alertes
+inhibit_rules:
+  # Inhiber les alertes de warning si une alerte critique est active
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']
+  
+  # Inhiber les alertes de service si le serveur est down
+  - source_match:
+      alertname: 'InstanceDown'
+    target_match_re:
+      alertname: '.*'
+    equal: ['instance']
