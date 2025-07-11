@@ -1,0 +1,228 @@
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: onlyflick_prometheus_prod
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.prod.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml
+      - prometheus_data_prod:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=720h'  # 30 jours pour la production
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+      - '--web.external-url=http://${MONITORING_DOMAIN:-localhost}:9090'
+    environment:
+      - PROMETHEUS_RETENTION_TIME=720h
+    networks:
+      - monitoring_prod
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/api/v1/query?query=up"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: onlyflick_grafana_prod
+    ports:
+      - "3000:3000"
+    environment:
+      # Configuration sécurisée avec variables d'environnement
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_SECURITY_SECRET_KEY=${GRAFANA_SECRET_KEY}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_USERS_ALLOW_ORG_CREATE=false
+      - GF_USERS_AUTO_ASSIGN_ORG=true
+      - GF_USERS_AUTO_ASSIGN_ORG_ROLE=Viewer
+      - GF_SECURITY_DISABLE_GRAVATAR=true
+      - GF_SECURITY_COOKIE_SECURE=true
+      - GF_SECURITY_COOKIE_SAMESITE=strict
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-worldmap-panel
+      - GF_SERVER_DOMAIN=${MONITORING_DOMAIN:-localhost}
+      - GF_SERVER_ROOT_URL=http://${MONITORING_DOMAIN:-localhost}:3000
+      - GF_SMTP_ENABLED=true
+      - GF_SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}:${SMTP_PORT:-587}
+      - GF_SMTP_USER=${SMTP_USERNAME:-${SMTP_FROM}}
+      - GF_SMTP_PASSWORD=${SMTP_PASSWORD}
+      - GF_SMTP_FROM_ADDRESS=${SMTP_FROM:-monitoring@yourdomain.com}
+      - GF_SMTP_FROM_NAME=OnlyFlick Monitoring
+      - GF_DATABASE_TYPE=postgres
+      - GF_DATABASE_HOST=grafana_db:5432
+      - GF_DATABASE_NAME=${GRAFANA_DB_NAME:-grafana}
+      - GF_DATABASE_USER=${GRAFANA_DB_USER:-grafana}
+      - GF_DATABASE_PASSWORD=${GRAFANA_DB_PASSWORD}
+      - GF_DATABASE_SSL_MODE=disable
+    volumes:
+      - grafana_data_prod:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+      - grafana_db
+    networks:
+      - monitoring_prod
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  grafana_db:
+    image: postgres:15-alpine
+    container_name: onlyflick_grafana_db_prod
+    environment:
+      - POSTGRES_DB=${GRAFANA_DB_NAME:-grafana}
+      - POSTGRES_USER=${GRAFANA_DB_USER:-grafana}
+      - POSTGRES_PASSWORD=${GRAFANA_DB_PASSWORD}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8
+    volumes:
+      - grafana_db_data_prod:/var/lib/postgresql/data
+    networks:
+      - monitoring_prod
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${GRAFANA_DB_USER:-grafana} -d ${GRAFANA_DB_NAME:-grafana}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: onlyflick_alertmanager_prod
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.prod.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanager_data_prod:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://${MONITORING_DOMAIN:-localhost}:9093'
+      - '--web.route-prefix=/'
+      - '--cluster.listen-address=0.0.0.0:9094'
+    environment:
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USERNAME=${SMTP_USERNAME:-${SMTP_FROM}}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SMTP_FROM=${SMTP_FROM:-monitoring@yourdomain.com}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@yourdomain.com}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - WEBHOOK_TOKEN=${WEBHOOK_TOKEN}
+    networks:
+      - monitoring_prod
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9093/api/v1/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  node_exporter:
+    image: prom/node-exporter:latest
+    container_name: onlyflick_node_exporter_prod
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
+      - '--web.listen-address=0.0.0.0:9100'
+      - '--log.level=info'
+    networks:
+      - monitoring_prod
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9100/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Nginx reverse proxy pour la production (optionnel)
+  nginx:
+    image: nginx:alpine
+    container_name: onlyflick_nginx_prod
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./monitoring/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./monitoring/nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - grafana
+      - prometheus
+      - alertmanager
+    networks:
+      - monitoring_prod
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    profiles:
+      - nginx  # Utiliser: docker-compose --profile nginx up
+
+  # Service de backup automatique (optionnel)
+  backup:
+    image: alpine:latest
+    container_name: onlyflick_backup_prod
+    volumes:
+      - grafana_data_prod:/backup/grafana:ro
+      - prometheus_data_prod:/backup/prometheus:ro
+      - grafana_db_data_prod:/backup/grafana_db:ro
+      - ./monitoring_backups:/backups
+    command: |
+      sh -c "
+        while true; do
+          echo 'Début de la sauvegarde...'
+          tar czf /backups/backup_$$(date +%Y%m%d_%H%M%S).tar.gz -C /backup .
+          find /backups -name 'backup_*.tar.gz' -mtime +7 -delete
+          echo 'Sauvegarde terminée'
+          sleep 86400
+        done
+      "
+    networks:
+      - monitoring_prod
+    restart: unless-stopped
+    profiles:
+      - backup  # Utiliser: docker-compose --profile backup up
+
+networks:
+  monitoring_prod:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  prometheus_data_prod:
+    driver: local
+  grafana_data_prod:
+    driver: local
+  grafana_db_data_prod:
+    driver: local
+  alertmanager_data_prod:
+    driver: local

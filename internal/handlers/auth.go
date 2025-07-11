@@ -14,6 +14,7 @@ import (
 	"github.com/Kaowarstail/Only-Flick-Go/config"
 	"github.com/Kaowarstail/Only-Flick-Go/internal/database"
 	"github.com/Kaowarstail/Only-Flick-Go/internal/middleware"
+	"github.com/Kaowarstail/Only-Flick-Go/internal/services"
 	"github.com/Kaowarstail/Only-Flick-Go/internal/utils"
 	"github.com/Kaowarstail/Only-Flick-Go/models"
 )
@@ -234,9 +235,13 @@ func Register(w http.ResponseWriter, r *http.Request) {
 	// Sauvegarder l'utilisateur dans la base de données
 	result = database.GetDB().Create(&newUser)
 	if result.Error != nil {
+		services.RecordError("database", "error")
 		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la création du compte: "+result.Error.Error())
 		return
 	}
+
+	// Enregistrer la métrique d'inscription
+	services.RecordUserRegistration(string(newUser.Role))
 
 	// Créer un token de vérification d'email
 	verificationToken, err := utils.CreateEmailVerificationToken(newUser.ID)

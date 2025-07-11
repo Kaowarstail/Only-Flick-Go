@@ -100,7 +100,7 @@ func CreateContentWithMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("✅ [CreateContentWithMedia] Contenu créé avec ID: %s\n", content.ID)
+	fmt.Printf("✅ [CreateContentWithMedia] Contenu créé avec ID: %d\n", content.ID)
 
 	// 2. Récupérer le fichier média
 	file, handler, err := r.FormFile("media")
@@ -375,9 +375,13 @@ func CreateContent(w http.ResponseWriter, r *http.Request) {
 
 	result = database.GetDB().Create(&content)
 	if result.Error != nil {
+		services.RecordError("database", "error")
 		respondWithError(w, http.StatusInternalServerError, "Erreur lors de la création du contenu")
 		return
 	}
+
+	// Enregistrer la métrique de création de contenu
+	services.RecordContentCreation(content.Type, content.CreatorID)
 
 	// Précharger les relations pour la réponse
 	database.GetDB().Preload("Creator").First(&content, content.ID)
@@ -1194,7 +1198,7 @@ func UploadContentImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("✅ [UploadContentImage] Contenu créé avec ID: %s\n", content.ID)
+	fmt.Printf("✅ [UploadContentImage] Contenu créé avec ID: %d\n", content.ID)
 
 	// Initialiser le service Cloudinary
 	fmt.Println("🔧 [UploadContentImage] Initialisation du service Cloudinary")
