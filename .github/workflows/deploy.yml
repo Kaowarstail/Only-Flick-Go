@@ -43,11 +43,18 @@ jobs:
 
       - name: Run tests
         run: |
-          go test -v -race -buildvcs ./...
+          # Utiliser notre script personnalisé qui ne teste que les packages avec des tests
+          ./run_tests.sh
           
       - name: Run tests with coverage
         run: |
-          go test -v -race -buildvcs -coverprofile=coverage.out ./...
+          # Trouver tous les packages avec des fichiers de test pour la couverture
+          TEST_PACKAGES=$(find . -name "*_test.go" -type f | xargs -I {} dirname {} | sort -u | xargs -I {} go list {})
+          if [ -n "$TEST_PACKAGES" ]; then
+            echo "$TEST_PACKAGES" | xargs go test -v -race -buildvcs -coverprofile=coverage.out
+          else
+            echo "⚠️ Aucun package avec des tests pour la couverture"
+          fi
 
       - name: Check code formatting
         run: |
