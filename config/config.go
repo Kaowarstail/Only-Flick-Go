@@ -130,6 +130,7 @@ func Load() (*Configuration, error) {
 			"http://localhost:49219",
 			"http://127.0.0.1:3000",
 			"http://127.0.0.1:49219",
+			"https://onlyflick.fun",
 		}
 		config.CORS.AllowCredentials = true
 		config.CORS.MaxAge = 86400
@@ -166,6 +167,7 @@ func loadFromEnv() {
 		"http://localhost:49219",
 		"http://127.0.0.1:3000",
 		"http://127.0.0.1:49219",
+		"https://onlyflick.fun",
 	})
 	config.CORS.AllowCredentials = getEnvAsBool("CORS_ALLOW_CREDENTIALS", true)
 	config.CORS.MaxAge = getEnvAsInt("CORS_MAX_AGE", 86400)
